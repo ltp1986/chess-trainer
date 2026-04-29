@@ -210,4 +210,108 @@ describe('Validator Module Tests', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('showValidationErrors', () => {
+    test('should show validation errors in container', () => {
+      const container = document.createElement('div');
+      container.id = 'test-container';
+      document.body.appendChild(container);
+      
+      const errors = {
+        name: ['姓名不能为空'],
+        email: ['邮箱格式不正确']
+      };
+      
+      Validator.showValidationErrors(errors, 'test-container');
+      
+      expect(container.innerHTML).toContain('姓名');
+      expect(container.innerHTML).toContain('邮箱');
+      expect(container.innerHTML).toContain('validation-error');
+      
+      document.body.removeChild(container);
+    });
+
+    test('should handle null container', () => {
+      expect(() => Validator.showValidationErrors({}, 'non-existent')).not.toThrow();
+    });
+  });
+
+  describe('getFieldLabel', () => {
+    test('should return correct label', () => {
+      expect(Validator.getFieldLabel('name')).toBe('姓名');
+      expect(Validator.getFieldLabel('email')).toBe('邮箱');
+      expect(Validator.getFieldLabel('rating')).toBe('评级');
+      expect(Validator.getFieldLabel('level')).toBe('等级');
+      expect(Validator.getFieldLabel('pgn')).toBe('PGN内容');
+    });
+
+    test('should return field name for unknown fields', () => {
+      expect(Validator.getFieldLabel('unknown')).toBe('unknown');
+    });
+  });
+
+  describe('validateForm with PGN', () => {
+    test('should validate form with PGN', () => {
+      const validPgn = '[Event "Test"]\n[White "Player1"]\n[Black "Player2"]\n1. e4 e5';
+      const formData = {
+        name: '张三',
+        pgn: validPgn
+      };
+      const result = Validator.validateForm(formData);
+      expect(result.valid).toBe(true);
+    });
+
+    test('should reject form with invalid PGN', () => {
+      const invalidPgn = 'invalid pgn content';
+      const formData = {
+        name: '张三',
+        pgn: invalidPgn
+      };
+      const result = Validator.validateForm(formData);
+      expect(result.valid).toBe(false);
+      expect(result.errors).toHaveProperty('pgn');
+    });
+  });
+
+  describe('validateFEN edge cases', () => {
+    test('should validate FEN with castling rights', () => {
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const result = Validator.validateFEN(fen);
+      expect(result.valid).toBe(true);
+    });
+
+    test('should validate FEN with en passant target', () => {
+      const fen = 'rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3';
+      const result = Validator.validateFEN(fen);
+      expect(result.valid).toBe(true);
+    });
+
+    test('should reject FEN with invalid turn', () => {
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR x KQkq - 0 1';
+      const result = Validator.validateFEN(fen);
+      expect(result.valid).toBe(false);
+    });
+
+    test('should reject FEN with incomplete rows', () => {
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const result = Validator.validateFEN(fen);
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validatePGN edge cases', () => {
+    test('should reject PGN with mismatched brackets', () => {
+      const pgn = '[Event "Test"\n1. e4';
+      const result = Validator.validatePGN(pgn);
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some(e => e.includes(']') || e.includes('括号'))).toBe(true);
+    });
+
+    test('should validate minimal valid PGN', () => {
+      const pgn = '[Event "T"]\n1. e4';
+      const result = Validator.validatePGN(pgn);
+      expect(result.valid).toBe(true);
+    });
+  });
 });
