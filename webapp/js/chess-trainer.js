@@ -210,6 +210,7 @@ class ChessTrainer {
         this.currentMistakeIndex = index;
         const mistake = this.mistakes[index];
         
+        this.clearHighlights();
         this.displayPosition(mistake.fen, this.boardElement);
         document.getElementById('bad-move').textContent = mistake.actual_move;
         document.getElementById('bad-cause').textContent = mistake.cause || '原因分析';
@@ -217,6 +218,7 @@ class ChessTrainer {
         document.getElementById('good-idea').textContent = mistake.idea || '改进思路';
         document.getElementById('tactic-exp').textContent = mistake.tactic_exp || '战术解释';
         
+        this.highlightMistake(mistake);
         this.updateProgress(index);
         
         document.querySelectorAll('.mistake-item').forEach((el, i) => {
@@ -225,6 +227,40 @@ class ChessTrainer {
         
         if (this.mistakes.length > 5 && index >= 5) {
             document.getElementById('remaining-mistakes').classList.remove('hidden');
+        }
+    }
+
+    clearHighlights() {
+        document.querySelectorAll('.chess-square').forEach(square => {
+            square.classList.remove('highlight-error', 'highlight-correct', 'legal-move', 'legal-capture', 'selected-piece');
+        });
+    }
+
+    highlightMistake(mistake) {
+        if (!mistake.actual_move || mistake.actual_move.length < 4) return;
+        
+        const actualFrom = mistake.actual_move.substring(0, 2);
+        const actualTo = mistake.actual_move.substring(2, 4);
+        
+        const fromSquare = document.querySelector(`#board [data-square="${actualFrom}"]`);
+        const toSquare = document.querySelector(`#board [data-square="${actualTo}"]`);
+        
+        if (fromSquare) fromSquare.classList.add('highlight-error');
+        if (toSquare) toSquare.classList.add('highlight-error');
+        
+        if (mistake.best_move && mistake.best_move.length >= 4) {
+            const bestFrom = mistake.best_move.substring(0, 2);
+            const bestTo = mistake.best_move.substring(2, 4);
+            
+            const bestFromSquare = document.querySelector(`#board [data-square="${bestFrom}"]`);
+            const bestToSquare = document.querySelector(`#board [data-square="${bestTo}"]`);
+            
+            if (bestFromSquare && !bestFromSquare.classList.contains('highlight-error')) {
+                bestFromSquare.classList.add('highlight-correct');
+            }
+            if (bestToSquare && !bestToSquare.classList.contains('highlight-error')) {
+                bestToSquare.classList.add('highlight-correct');
+            }
         }
     }
 
@@ -348,26 +384,156 @@ class ChessTrainer {
             const piece = square.querySelector('.chess-piece');
             if (piece) {
                 this.selectedPiece = squareName;
-                square.style.outline = '3px solid blue';
+                this.showLegalMoves(squareName, exercise.fen);
+                square.classList.add('selected-piece');
             }
         } else {
             const from = this.selectedPiece;
             const to = squareName;
             const move = from + to;
             
-            document.querySelectorAll('.chess-square').forEach(s => s.style.outline = '');
+            this.clearHighlights();
             this.selectedPiece = null;
             
             if (move === exercise.best_move) {
-                document.getElementById('exercise-feedback').innerHTML = 
-                    '<p class="text-green-600 font-medium">✅ 正确！太棒了！</p>';
+                this.showCorrectFeedback();
                 this.exerciseStats.correct++;
             } else {
-                document.getElementById('exercise-feedback').innerHTML = 
-                    `<p class="text-red-600 font-medium">❌ 错误！正确答案: ${exercise.best_move}</p>`;
+                this.showWrongFeedback(exercise);
                 this.exerciseStats.wrong++;
             }
         }
+    }
+
+    showLegalMoves(squareName, fen) {
+        this.clearHighlights();
+        
+        const legalMoves = this.getLegalMoves(fen, squareName);
+        
+        legalMoves.forEach(move => {
+            const targetSquare = document.querySelector(`#exercise-board [data-square="${move.to}"]`);
+            if (targetSquare) {
+                if (move.capture) {
+                    targetSquare.classList.add('legal-capture');
+                } else {
+                    targetSquare.classList.add('legal-move');
+                }
+            }
+        });
+    }
+
+    getLegalMoves(fen, fromSquare) {
+        const moves = [];
+        const board = this.parseFEN(fen);
+        const piece = board[fromSquare];
+        
+        if (!piece) return moves;
+        
+        const isWhite = piece === piece.toUpperCase();
+        const directions = {
+            'P': isWhite ? [[0, -1], [0, -2], [-1, -1], [1, -1]] : [[0, 1], [0, 2], [-1, 1], [1, 1]],
+            'N': [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]],
+            'B': [[-1, -1], [-1, 1], [1, -1], [1, 1]],
+            'R': [[-1, 0], [1, 0], [0, -1], [0, 1]],
+            'Q': [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]],
+            'K': [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]]
+        };
+        
+        const pieceType = piece.toUpperCase();
+        const dirs = directions[pieceType] || [];
+        
+        dirs.forEach(dir => {
+            let [dx, dy] = dir;
+            let newCol = fromSquare.charCodeAt(0) - 'a'.charCodeAt(0) + dx;
+            let newRow = parseInt(fromSquare.charAt(1)) - 1 + dy;
+            
+            if (pieceType === 'P') {
+                if (Math.abs(dy) === 2) {
+                    const startRow = isWhite ? 6 : 1;
+                    if (parseInt(fromSquare.charAt(1)) - 1 !== startRow) return;
+                    const middleSquare = String.fromCharCode('a'.charCodeAt(0) + newCol - dx) + (newRow - dy + 1);
+                    if (board[middleSquare]) return;
+                }
+                if (Math.abs(dx) === 1 && !board[String.fromCharCode('a'.charCodeAt(0) + newCol) + (newRow + 1)]) return;
+            }
+            
+            while (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+                const toSquare = String.fromCharCode('a'.charCodeAt(0) + newCol) + (newRow + 1);
+                const targetPiece = board[toSquare];
+                
+                if (!targetPiece) {
+                    if (pieceType === 'P' && Math.abs(dx) === 0) {
+                        moves.push({ to: toSquare, capture: false });
+                    } else if (pieceType !== 'P') {
+                        moves.push({ to: toSquare, capture: false });
+                    }
+                } else {
+                    const targetIsWhite = targetPiece === targetPiece.toUpperCase();
+                    if (targetIsWhite !== isWhite) {
+                        if (pieceType === 'P' && Math.abs(dx) > 0) {
+                            moves.push({ to: toSquare, capture: true });
+                        } else if (pieceType !== 'P') {
+                            moves.push({ to: toSquare, capture: true });
+                        }
+                    }
+                    break;
+                }
+                
+                if (pieceType === 'N' || pieceType === 'K') break;
+                
+                newCol += dx;
+                newRow += dy;
+            }
+        });
+        
+        return moves;
+    }
+
+    parseFEN(fen) {
+        const board = {};
+        const parts = fen.split(' ')[0];
+        const rows = parts.split('/');
+        
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            let col = 0;
+            for (const char of row) {
+                if (char >= '1' && char <= '8') {
+                    col += parseInt(char);
+                } else {
+                    const square = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - i);
+                    board[square] = char;
+                    col++;
+                }
+            }
+        }
+        
+        return board;
+    }
+
+    showCorrectFeedback() {
+        const feedback = document.getElementById('exercise-feedback');
+        feedback.innerHTML = `
+            <div class="bg-green-100 border border-green-300 rounded-lg p-4 feedback-correct">
+                <p class="text-green-700 font-bold text-lg">🎉 太棒了！正确！</p>
+                <p class="text-green-600 text-sm mt-1">你找到了最佳走法！</p>
+            </div>
+        `;
+        feedback.classList.remove('feedback-wrong');
+        feedback.classList.add('feedback-correct');
+    }
+
+    showWrongFeedback(exercise) {
+        const feedback = document.getElementById('exercise-feedback');
+        feedback.innerHTML = `
+            <div class="bg-red-100 border border-red-300 rounded-lg p-4 feedback-wrong">
+                <p class="text-red-700 font-bold text-lg">😅 差一点！</p>
+                <p class="text-red-600 text-sm mt-1">正确答案: <span class="font-mono font-bold">${exercise.best_move}</span></p>
+                <p class="text-gray-600 text-sm mt-2">${exercise.idea || '再想想，寻找更好的走法！'}</p>
+            </div>
+        `;
+        feedback.classList.remove('feedback-correct');
+        feedback.classList.add('feedback-wrong');
     }
 
     showHint() {

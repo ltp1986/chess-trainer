@@ -167,6 +167,83 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
         
+        .chess-square.highlight-error {
+            background: linear-gradient(135deg, #ff9a9a 0%, #ff6b6b 100%) !important;
+            animation: pulse-error 1s infinite;
+        }
+        
+        .chess-square.highlight-correct {
+            background: linear-gradient(135deg, #9aff9a 0%, #6bff6b 100%) !important;
+            animation: pulse-correct 1s infinite;
+        }
+        
+        .chess-square.legal-move {
+            position: relative;
+        }
+        
+        .chess-square.legal-move::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: rgba(76, 175, 80, 0.6);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .chess-square.legal-capture::after {
+            content: '';
+            position: absolute;
+            width: 80%;
+            height: 80%;
+            border: 3px dashed rgba(255, 152, 0, 0.8);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .chess-square.selected-piece {
+            box-shadow: inset 0 0 0 4px #2196F3;
+        }
+        
+        @keyframes pulse-error {
+            0%, 100% { box-shadow: inset 0 0 0 3px rgba(255, 0, 0, 0.8); }
+            50% { box-shadow: inset 0 0 0 6px rgba(255, 0, 0, 0.4); }
+        }
+        
+        @keyframes pulse-correct {
+            0%, 100% { box-shadow: inset 0 0 0 3px rgba(76, 175, 80, 0.8); }
+            50% { box-shadow: inset 0 0 0 6px rgba(76, 175, 80, 0.4); }
+        }
+        
+        @keyframes move-piece {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .chess-piece.moving {
+            animation: move-piece 0.3s ease-in-out;
+        }
+        
+        .feedback-correct {
+            animation: fade-in 0.5s ease-out;
+        }
+        
+        .feedback-wrong {
+            animation: shake 0.5s ease-out;
+        }
+        
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
         @media (max-width: 640px) {
             .chess-square {
                 width: 40px;

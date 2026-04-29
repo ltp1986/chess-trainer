@@ -9,6 +9,12 @@ import logging
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
 from urllib.parse import unquote
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from mock_data import (
     generate_mock_profile,
     generate_mock_mistakes,
@@ -1084,11 +1090,24 @@ def call_doubao_api(prompt, temperature=0.7, max_tokens=2048):
         if response.status_code == 200:
             data = response.json()
             output = data.get("output", [])
-            if output:
-                contents = output[0].get("content", [])
-                for content in contents:
-                    if content.get("type") == "output_text":
-                        return content.get("text")
+            
+            for output_item in output:
+                contents = output_item.get("content", [])
+                if isinstance(contents, list):
+                    for content in contents:
+                        if content.get("type") == "output_text":
+                            text = content.get("text", "").strip()
+                            logger.info(f"豆包API响应成功，token使用: {data.get('usage', {}).get('total_tokens', 0)}")
+                            return text
+            
+            logger.warning(f"豆包API响应格式异常，尝试从summary提取: {data}")
+            for output_item in output:
+                summary = output_item.get("summary", [])
+                if isinstance(summary, list):
+                    for item in summary:
+                        if item.get("type") == "summary_text":
+                            return item.get("text", "").strip()
+            
             logger.error(f"豆包API响应格式错误: {data}")
             return None
         else:
@@ -1458,6 +1477,175 @@ def get_all_exercises():
                 pass
     return jsonify({"exercises": all_exercises})
 
+@app.route('/api/exercises/classify', methods=['POST'])
+def classify_exercise():
+    data = request.json or {}
+    fen = data.get('fen')
+    actual_move = data.get('actual_move')
+    best_move = data.get('best_move')
+    loss = data.get('loss', 0)
+    move_number = data.get('move_number', 0)
+    
+    if not fen:
+        return jsonify({"error": "缺少FEN参数"}), 400
+    
+    logger.info(f"AI错题分类: move_number={move_number}, loss={loss}")
+    
+    prompt = f"""
+你是一位专业的国际象棋教练，擅长分析错误走法并进行分类。
+
+请分析以下错题并进行智能分类：
+
+【FEN】{fen}
+【实际走法】{actual_move}
+【最佳走法】{best_move}
+【分值损失】{loss}
+【步数】{move_number}
+
+请输出JSON格式的分类结果，包含以下字段：
+- category: 错误类型（开局错误/中局错误/残局错误/战术错误/战略错误/计算错误）
+- sub_category: 子类型（如：双攻、牵制、通路兵、王安全、兵结构等）
+- difficulty: 难度等级（1-5，1最简单，5最难）
+- description: 错误原因描述（不超过100字）
+- suggestion: 改进建议（不超过100字）
+- common_mistake: 是否为常见错误（true/false）
+
+要求：
+1. 分类要准确、专业
+2. 描述和建议要具体
+3. 输出必须是纯JSON格式，不要包含其他文本
+"""
+    
+    result = call_doubao_api(prompt, temperature=0.3, max_tokens=1000)
+    
+    if result:
+        try:
+            classification = json.loads(result)
+            classification["classified_at"] = datetime.datetime.now().isoformat()
+            classification["generated_by_ai"] = True
+            
+            logger.info("AI错题分类成功")
+            return jsonify({
+                "success": True,
+                "classification": classification,
+                "generated_by_ai": True
+            })
+        except json.JSONDecodeError as e:
+            logger.error(f"AI分类响应解析失败: {e}")
+            logger.debug(f"原始响应: {result}")
+    
+    logger.warning("AI调用失败，使用本地分类")
+    classification = generate_local_classification(fen, actual_move, best_move, loss, move_number)
+    classification["generated_by_ai"] = False
+    
+    return jsonify({
+        "success": True,
+        "classification": classification,
+        "generated_by_ai": False
+    })
+
+def generate_local_classification(fen, actual_move, best_move, loss, move_number):
+    board = chess.Board(fen)
+    
+    if move_number <= 10:
+        category = "开局错误"
+        sub_category = "开局准备"
+    elif board.piece_count <= 12:
+        category = "残局错误"
+        sub_category = "残局技巧"
+    else:
+        category = "中局错误"
+        if loss > 200:
+            sub_category = "战术错误"
+        else:
+            sub_category = "战略错误"
+    
+    difficulty = 3
+    if loss > 300:
+        difficulty = 5
+    elif loss > 200:
+        difficulty = 4
+    elif loss > 100:
+        difficulty = 3
+    elif loss > 50:
+        difficulty = 2
+    else:
+        difficulty = 1
+    
+    description = "需要改进的走法"
+    suggestion = "分析最佳走法并练习"
+    
+    if loss > 200:
+        description = "严重失误，导致明显劣势"
+        suggestion = "加强战术计算训练"
+    elif loss > 100:
+        description = "明显失误，影响局面"
+        suggestion = "提高局面评估能力"
+    else:
+        description = "轻微失误，需要注意"
+        suggestion = "继续练习，积累经验"
+    
+    return {
+        "category": category,
+        "sub_category": sub_category,
+        "difficulty": difficulty,
+        "description": description,
+        "suggestion": suggestion,
+        "common_mistake": loss > 100,
+        "classified_at": datetime.datetime.now().isoformat()
+    }
+
+@app.route('/api/exercises/batch_classify', methods=['POST'])
+def batch_classify_exercises():
+    data = request.json or {}
+    exercises = data.get('exercises', [])
+    
+    if not exercises:
+        return jsonify({"error": "缺少练习数据"}), 400
+    
+    logger.info(f"批量分类练习: {len(exercises)} 条")
+    
+    results = []
+    for ex in exercises:
+        result = classify_exercise_internal(ex)
+        results.append(result)
+    
+    return jsonify({
+        "success": True,
+        "classifications": results,
+        "total_count": len(results)
+    })
+
+def classify_exercise_internal(exercise):
+    fen = exercise.get('fen')
+    actual_move = exercise.get('actual_move')
+    best_move = exercise.get('best_move')
+    loss = exercise.get('loss', 0)
+    move_number = exercise.get('move_number', 0)
+    
+    prompt = f"""
+分析以下错题：
+
+【FEN】{fen}
+【实际走法】{actual_move}
+【最佳走法】{best_move}
+【分值损失】{loss}
+【步数】{move_number}
+
+请输出JSON格式：
+{{"category": "错误类型", "sub_category": "子类型", "difficulty": 1-5, "description": "描述", "suggestion": "建议"}}
+"""
+    
+    result = call_doubao_api(prompt, temperature=0.3, max_tokens=500)
+    
+    if result:
+        try:
+            return json.loads(result)
+        except:
+            pass
+    
+    return generate_local_classification(fen, actual_move, best_move, loss, move_number)
+
 @app.route('/api/profile', methods=['GET'])
 def get_profile():
     player_id = request.args.get('player_id')
@@ -1476,6 +1664,10 @@ def generate_profile():
     data = request.json or {}
     player_id = data.get('player_id', 'player_cd137a6a')
     player_name = data.get('player_name', '刘洪硕')
+    use_ai = data.get('use_ai', False)
+    
+    if use_ai:
+        return generate_enhanced_profile(player_id, player_name)
     
     profile = generate_mock_profile(player_id, player_name)
     
@@ -1487,6 +1679,97 @@ def generate_profile():
         "success": True,
         "message": "能力画像生成成功",
         "profile": profile
+    })
+
+@app.route('/api/profile/generate/enhanced', methods=['POST'])
+def generate_enhanced_profile(player_id=None, player_name=None):
+    data = request.json or {}
+    if not player_id:
+        player_id = data.get('player_id', 'player_cd137a6a')
+    if not player_name:
+        player_name = data.get('player_name', '刘洪硕')
+    
+    logger.info(f"生成AI增强能力画像: player_id={player_id}, player_name={player_name}")
+    
+    games_data = []
+    player = load_player(player_id) if player_id else None
+    if player:
+        game_history = player.get("game_history", [])
+        for game_id in game_history[:5]:
+            game = load_game_from_library(game_id)
+            if game:
+                games_data.append(game)
+    
+    prompt = f"""
+你是一位专业的国际象棋教练，擅长分析棋手对局并生成详细的能力画像。
+
+请根据以下棋局分析数据，为棋手【{player_name}】生成专业的能力画像：
+
+【棋手信息】
+- 棋手ID: {player_id}
+- 棋手姓名: {player_name}
+- 对局数量: {len(games_data)}
+
+【棋局分析数据】
+{json.dumps(games_data, ensure_ascii=False, indent=2)}
+
+请输出JSON格式的能力画像，包含以下字段：
+- strengths: 强项列表，每项包含skill（技能名称）和score（分数0-100）
+- weaknesses: 弱项列表，每项包含skill和score
+- style: 棋风描述（如：进攻型、稳健型、均衡型、战术型等）
+- suggestions: 训练建议列表（最多5条，每条不超过50字）
+- overall_rating: 估计等级分（整数，范围1000-2500）
+- detailed_analysis: 详细分析报告（中文，不少于200字）
+- opening_skill: 开局能力评分（0-100）
+- midgame_skill: 中局能力评分（0-100）
+- endgame_skill: 残局能力评分（0-100）
+- tactical_vision: 战术眼光评分（0-100）
+- positional_understanding: 局面理解评分（0-100）
+
+要求：
+1. 分析要专业、深入，基于提供的棋局数据
+2. 建议要具体可行，有针对性
+3. 评分要合理，符合实际水平
+4. 输出必须是纯JSON格式，不要包含其他文本
+"""
+    
+    result = call_doubao_api(prompt, temperature=0.5, max_tokens=3000)
+    
+    if result:
+        try:
+            profile = json.loads(result)
+            profile["generated_at"] = datetime.datetime.now().isoformat()
+            profile["games_analyzed"] = len(games_data)
+            profile["generated_by_ai"] = True
+            
+            profile_path = os.path.join(PROFILE_DIR, f"profile_{player_id}.json")
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"AI能力画像生成成功: {player_id}")
+            return jsonify({
+                "success": True,
+                "message": "AI增强能力画像生成成功",
+                "profile": profile,
+                "generated_by_ai": True
+            })
+        except json.JSONDecodeError as e:
+            logger.error(f"AI响应解析失败: {e}")
+            logger.debug(f"原始响应: {result}")
+    
+    logger.warning("AI调用失败，使用本地生成")
+    profile = generate_local_profile(games_data)
+    profile["generated_by_ai"] = False
+    
+    profile_path = os.path.join(PROFILE_DIR, f"profile_{player_id}.json")
+    with open(profile_path, "w", encoding="utf-8") as f:
+        json.dump(profile, f, ensure_ascii=False, indent=2)
+    
+    return jsonify({
+        "success": True,
+        "message": "使用本地算法生成能力画像",
+        "profile": profile,
+        "generated_by_ai": False
     })
 
 def generate_local_profile(games_data):
@@ -1601,6 +1884,148 @@ def export_profile():
             response.headers['Content-Disposition'] = 'attachment; filename=profile.json'
             return response
     return jsonify({"error": "画像不存在"}), 404
+
+@app.route('/api/analyze/enhanced', methods=['POST'])
+def analyze_position_enhanced():
+    data = request.json or {}
+    fen = data.get('fen')
+    move_number = data.get('move_number', 0)
+    turn = data.get('turn', 'white')
+    context = data.get('context', '')
+    
+    if not fen:
+        return jsonify({"error": "缺少FEN参数"}), 400
+    
+    logger.info(f"AI深度分析棋局: move_number={move_number}, turn={turn}")
+    
+    prompt = f"""
+你是一位专业的国际象棋特级大师，擅长深度分析棋局。请分析以下局面：
+
+【FEN】{fen}
+【当前回合】{turn}
+【已走步数】{move_number}
+【附加信息】{context}
+
+请输出JSON格式的分析结果，包含以下字段：
+- evaluation: 局面评估（如"白方优势"、"黑方优势"、"均势"）
+- score: 分数评估（用cp表示，正数表示白方优势，负数表示黑方优势）
+- key_tactics: 关键战术机会列表（每项包含name和description）
+- recommended_moves: 推荐走法列表（每项包含move和reason）
+- threats: 潜在威胁列表（每项包含description）
+- strategic_advice: 战略建议（字符串，不超过500字）
+- opening_name: 开局名称（如果能识别）
+- position_type: 局面类型（开局/中局/残局）
+
+要求：
+1. 分析要专业、深入
+2. 推荐走法要有具体理由
+3. 输出必须是纯JSON格式，不要包含其他文本
+"""
+    
+    result = call_doubao_api(prompt, temperature=0.4, max_tokens=2000)
+    
+    if result:
+        try:
+            analysis = json.loads(result)
+            analysis["fen"] = fen
+            analysis["analyzed_at"] = datetime.datetime.now().isoformat()
+            analysis["generated_by_ai"] = True
+            
+            logger.info("AI棋局分析成功")
+            return jsonify({
+                "success": True,
+                "analysis": analysis,
+                "generated_by_ai": True
+            })
+        except json.JSONDecodeError as e:
+            logger.error(f"AI分析响应解析失败: {e}")
+            logger.debug(f"原始响应: {result}")
+    
+    logger.warning("AI调用失败，使用本地分析")
+    analysis = generate_local_analysis(fen, move_number, turn)
+    analysis["generated_by_ai"] = False
+    
+    return jsonify({
+        "success": True,
+        "analysis": analysis,
+        "generated_by_ai": False
+    })
+
+def generate_local_analysis(fen, move_number, turn):
+    board = chess.Board(fen)
+    is_white = turn == 'white'
+    
+    try:
+        eng = get_engine()
+        info = eng.analyse(board, chess.engine.Limit(depth=DEPTH, time=MOVE_TIME))
+        
+        score = info.get("score")
+        eval_score = 0
+        if score:
+            try:
+                eval_score = score.relative.score(mate_score=10000)
+            except:
+                pass
+        
+        pv_moves = [m.uci() for m in info.get("pv", [])[:3]]
+        
+        if eval_score > 150:
+            evaluation = "白方明显优势"
+        elif eval_score > 50:
+            evaluation = "白方优势"
+        elif eval_score > -50:
+            evaluation = "均势"
+        elif eval_score > -150:
+            evaluation = "黑方优势"
+        else:
+            evaluation = "黑方明显优势"
+        
+        key_tactics = []
+        if eval_score > 200:
+            key_tactics.append({
+                "name": "优势局面",
+                "description": "当前局面占据明显优势，应保持压力"
+            })
+        
+        recommended_moves = []
+        for i, mv in enumerate(pv_moves):
+            recommended_moves.append({
+                "move": mv,
+                "reason": f"推荐走法 #{i+1}"
+            })
+        
+        position_type = "中局"
+        if move_number <= 10:
+            position_type = "开局"
+        elif board.piece_count <= 12:
+            position_type = "残局"
+        
+        return {
+            "evaluation": evaluation,
+            "score": eval_score,
+            "key_tactics": key_tactics,
+            "recommended_moves": recommended_moves,
+            "threats": [],
+            "strategic_advice": "继续保持当前策略，寻找战术机会",
+            "opening_name": "未知",
+            "position_type": position_type,
+            "fen": fen,
+            "analyzed_at": datetime.datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"本地分析失败: {e}")
+        return {
+            "evaluation": "分析失败",
+            "score": 0,
+            "key_tactics": [],
+            "recommended_moves": [],
+            "threats": [],
+            "strategic_advice": "无法分析当前局面",
+            "opening_name": "未知",
+            "position_type": "中局",
+            "fen": fen,
+            "analyzed_at": datetime.datetime.now().isoformat()
+        }
 
 @app.route('/api/training/plan', methods=['GET'])
 def get_training_plan():
