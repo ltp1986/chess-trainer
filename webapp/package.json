@@ -8,9 +8,16 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern 'unit'",
+    "test:integration": "jest --testPathPattern 'integration'",
+    "test:api": "jest --testPathPattern 'api'",
+    "test:board": "jest --testPathPattern 'board-utils'",
+    "test:full": "node run-tests.js",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "pre-commit": "npm run lint && npm run test"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

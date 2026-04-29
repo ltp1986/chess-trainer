@@ -46,11 +46,11 @@
         }
         
         .chess-square.light-square {
-            background: linear-gradient(135deg, #f5e6d3 0%, #e8d4bc 100%);
+            background: linear-gradient(135deg, #f0d9b5 0%, #e6c998 100%);
         }
         
         .chess-square.dark-square {
-            background: linear-gradient(135deg, #b8956f 0%, #a68056 100%);
+            background: linear-gradient(135deg, #8b6914 0%, #6b4d10 100%);
         }
         
         .chess-square:hover {
@@ -58,7 +58,18 @@
         }
         
         .chess-square.selected {
-            box-shadow: inset 0 0 0 3px #4CAF50;
+            box-shadow: inset 0 0 0 4px #4CAF50;
+            background: linear-gradient(135deg, #a5d6a7 0%, #81c784 100%) !important;
+        }
+        
+        .chess-square.legal-move::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(76, 175, 80, 0.5);
+            z-index: 2;
         }
         
         .chess-square.hint-from {

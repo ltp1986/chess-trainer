@@ -41,6 +41,9 @@ async function loadExercisesPage() {
                     <button onclick="generateExercises()" class="ml-auto px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
                         🔄 重新生成
                     </button>
+                    <button onclick="classifyAllExercises()" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition">
+                        🤖 AI分类
+                    </button>
                 </div>
                 <div class="space-y-3">
             `;
@@ -49,14 +52,39 @@ async function loadExercisesPage() {
                 const statusClass = exercise.completed ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300';
                 const statusText = exercise.completed ? '✓ 已完成' : '待练习';
                 
+                let categoryBadge = '';
+                if (exercise.category) {
+                    const categoryColors = {
+                        '开局错误': 'bg-blue-100 text-blue-700',
+                        '中局错误': 'bg-yellow-100 text-yellow-700',
+                        '残局错误': 'bg-purple-100 text-purple-700',
+                        '战术错误': 'bg-red-100 text-red-700',
+                        '战略错误': 'bg-orange-100 text-orange-700',
+                        '计算错误': 'bg-pink-100 text-pink-700'
+                    };
+                    const colorClass = categoryColors[exercise.category] || 'bg-gray-100 text-gray-700';
+                    categoryBadge = `<span class="inline-block px-2 py-0.5 rounded-full text-xs ${colorClass}">${exercise.category}</span>`;
+                }
+                
+                let difficultyStars = '';
+                if (exercise.difficulty) {
+                    difficultyStars = '★'.repeat(exercise.difficulty) + '☆'.repeat(5 - exercise.difficulty);
+                }
+                
                 html += `
                     <div class="border rounded-lg p-4 ${statusClass}">
                         <div class="flex justify-between items-start">
-                            <div>
-                                <h4 class="font-medium">错题 #${exercise.id}</h4>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <h4 class="font-medium">错题 #${exercise.id}</h4>
+                                    ${categoryBadge}
+                                </div>
                                 <p class="text-sm text-gray-600">棋局: ${exercise.filename}</p>
                                 <p class="text-sm text-gray-600">第 ${exercise.move_number} 步</p>
                                 <p class="text-sm text-gray-600">损失: ${exercise.loss} 分</p>
+                                ${exercise.description ? `<p class="text-sm text-gray-500 mt-1">${exercise.description}</p>` : ''}
+                                ${exercise.suggestion ? `<p class="text-sm text-green-600 mt-1">💡 ${exercise.suggestion}</p>` : ''}
+                                ${difficultyStars ? `<div class="text-sm text-yellow-500 mt-1">难度: ${difficultyStars}</div>` : ''}
                             </div>
                             <div class="text-right">
                                 <span class="text-sm font-medium ${exercise.completed ? 'text-green-600' : 'text-red-600'}">${statusText}</span>
@@ -93,6 +121,51 @@ async function generateExercises() {
         loadExercisesPage();
     } catch (error) {
         alert('生成失败: ' + error.message);
+        loadExercisesPage();
+    }
+}
+
+async function classifyAllExercises() {
+    if (!currentExercisePlayerId) {
+        alert('请先选择棋手');
+        return;
+    }
+    
+    const container = document.getElementById('exercises-content');
+    showLoading(container);
+    
+    try {
+        const data = await apiCall(`/api/exercises/player/${currentExercisePlayerId}`);
+        const exercises = data.exercises || [];
+        
+        if (exercises.length === 0) {
+            alert('暂无错题可分类');
+            loadExercisesPage();
+            return;
+        }
+        
+        const response = await apiCall('/api/exercises/batch_classify', {
+            method: 'POST',
+            body: { exercises: exercises }
+        });
+        
+        const updatedExercises = data.exercises.map((ex, index) => {
+            const classification = response.classifications[index];
+            if (classification) {
+                return { ...ex, ...classification };
+            }
+            return ex;
+        });
+        
+        const saveResponse = await apiCall(`/api/exercises/update/${currentExercisePlayerId}`, {
+            method: 'POST',
+            body: { exercises: updatedExercises }
+        });
+        
+        alert(`🤖 AI分类完成！共分类 ${response.total_count} 道错题`);
+        loadExercisesPage();
+    } catch (error) {
+        alert('分类失败: ' + error.message);
         loadExercisesPage();
     }
 }
@@ -136,7 +209,8 @@ function initPracticeBoard() {
         for (let file = 0; file < 8; file++) {
             const fileName = 'abcdefgh'[file];
             const squareName = fileName + rank;
-            const isLight = (file + (8 - rank)) % 2 === 0;
+            const row = 8 - rank;
+            const isLight = (row + file) % 2 === 0;
             const colorClass = isLight ? 'light-square' : 'dark-square';
             
             practiceBoardState.squares[squareName] = {
@@ -254,12 +328,14 @@ function handlePracticeBoardClick(e) {
     const squareName = square.dataset.square;
     
     document.querySelectorAll('.chess-square').forEach(s => s.classList.remove('selected'));
+    clearMoveArrows();
     
     if (!selectedPiece) {
         const pieceEl = square.querySelector('.chess-piece');
         if (pieceEl) {
             selectedPiece = squareName;
             square.classList.add('selected');
+            showLegalMoves(squareName);
         }
     } else {
         const from = selectedPiece;
@@ -267,8 +343,73 @@ function handlePracticeBoardClick(e) {
         const move = from + to;
         selectedPiece = null;
         
-        checkMove(move);
+        drawMoveArrow(from, to);
+        setTimeout(() => {
+            checkMove(move);
+        }, 300);
     }
+}
+
+function showLegalMoves(squareName) {
+    const legalMoves = getLegalMoves(squareName);
+    legalMoves.forEach(move => {
+        const targetSquare = move.substring(2, 4);
+        const targetEl = document.querySelector(`[data-square="${targetSquare}"]`);
+        if (targetEl) {
+            targetEl.classList.add('legal-move');
+        }
+    });
+}
+
+function getLegalMoves(fromSquare) {
+    const moves = [];
+    const files = 'abcdefgh';
+    const ranks = '12345678';
+    
+    const piece = practiceBoardState?.squares[fromSquare]?.piece;
+    if (!piece) return [];
+    
+    const pieceType = piece.toUpperCase();
+    const isWhite = piece === piece.toUpperCase();
+    
+    const file = fromSquare[0];
+    const rank = parseInt(fromSquare[1]);
+    const fileIndex = files.indexOf(file);
+    
+    if (pieceType === 'P') {
+        const direction = isWhite ? 1 : -1;
+        if (ranks.includes(String(rank + direction))) {
+            moves.push(`${fromSquare}${file}${rank + direction}`);
+        }
+        if ((rank === 2 && isWhite) || (rank === 7 && !isWhite)) {
+            if (ranks.includes(String(rank + 2 * direction))) {
+                moves.push(`${fromSquare}${file}${rank + 2 * direction}`);
+            }
+        }
+        const captureFiles = [fileIndex - 1, fileIndex + 1];
+        captureFiles.forEach(fi => {
+            if (fi >= 0 && fi < 8) {
+                const captureFile = files[fi];
+                if (ranks.includes(String(rank + direction))) {
+                    moves.push(`${fromSquare}${captureFile}${rank + direction}`);
+                }
+            }
+        });
+    } else if (pieceType === 'N') {
+        const knightMoves = [
+            [2, 1], [2, -1], [-2, 1], [-2, -1],
+            [1, 2], [1, -2], [-1, 2], [-1, -2]
+        ];
+        knightMoves.forEach(([df, dr]) => {
+            const newFileIndex = fileIndex + df;
+            const newRank = rank + dr;
+            if (newFileIndex >= 0 && newFileIndex < 8 && newRank >= 1 && newRank <= 8) {
+                moves.push(`${fromSquare}${files[newFileIndex]}${newRank}`);
+            }
+        });
+    }
+    
+    return moves;
 }
 
 function checkMove(move) {
@@ -305,11 +446,17 @@ function highlightMove(move) {
 }
 
 function showPracticeHint() {
-    if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
+    console.log('showPracticeHint called');
+    if (!currentPracticeExercise || !currentPracticeExercise.best_move) {
+        console.log('No exercise or best move');
+        return;
+    }
     
     const bestMove = currentPracticeExercise.best_move;
     const fromSquare = bestMove.substring(0, 2);
     const toSquare = bestMove.substring(2, 4);
+    
+    console.log(`Hint: ${fromSquare} -> ${toSquare}`);
     
     const hint = `提示：从 ${fromSquare} 移动到 ${toSquare} 附近`;
     document.getElementById('practice-hint-text').textContent = hint;
@@ -321,16 +468,30 @@ function showPracticeHint() {
     const fromEl = document.querySelector(`[data-square="${fromSquare}"]`);
     const toEl = document.querySelector(`[data-square="${toSquare}"]`);
     
-    if (fromEl) fromEl.classList.add('hint-from');
-    if (toEl) toEl.classList.add('hint-to');
+    if (fromEl) {
+        fromEl.classList.add('hint-from');
+        console.log('Added hint-from to', fromSquare);
+    }
+    if (toEl) {
+        toEl.classList.add('hint-to');
+        console.log('Added hint-to to', toSquare);
+    }
+    
+    drawMoveArrow(fromSquare, toSquare);
 }
 
 function showPracticeAnswer() {
-    if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
+    console.log('showPracticeAnswer called');
+    if (!currentPracticeExercise || !currentPracticeExercise.best_move) {
+        console.log('No exercise or best move');
+        return;
+    }
     
     const bestMove = currentPracticeExercise.best_move;
     const fromSquare = bestMove.substring(0, 2);
     const toSquare = bestMove.substring(2, 4);
+    
+    console.log(`Answer: ${fromSquare} -> ${toSquare}`);
     
     document.querySelectorAll('.chess-square').forEach(s => {
         s.classList.remove('hint-from', 'hint-to');
@@ -339,11 +500,58 @@ function showPracticeAnswer() {
     const fromEl = document.querySelector(`[data-square="${fromSquare}"]`);
     const toEl = document.querySelector(`[data-square="${toSquare}"]`);
     
-    if (fromEl) fromEl.classList.add('hint-from');
-    if (toEl) toEl.classList.add('hint-to');
+    if (fromEl) {
+        fromEl.classList.add('hint-from');
+        console.log('Added hint-from to', fromSquare);
+    }
+    if (toEl) {
+        toEl.classList.add('hint-to');
+        console.log('Added hint-to to', toSquare);
+    }
+    
+    drawMoveArrow(fromSquare, toSquare);
     
     document.getElementById('practice-feedback').innerHTML = 
         `<div class="bg-yellow-100 border border-yellow-300 rounded-lg p-4"><p class="text-yellow-800 font-medium">✅ 正确答案: ${bestMove}</p></div>`;
+}
+
+function drawMoveArrow(from, to) {
+    clearMoveArrows();
+    
+    const fromEl = document.querySelector(`[data-square="${from}"]`);
+    const toEl = document.querySelector(`[data-square="${to}"]`);
+    
+    if (!fromEl || !toEl) return;
+    
+    const board = document.querySelector('.chess-board');
+    if (!board) return;
+    
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+    const boardRect = board.getBoundingClientRect();
+    
+    const fromX = fromRect.left - boardRect.left + fromRect.width / 2;
+    const fromY = fromRect.top - boardRect.top + fromRect.height / 2;
+    const toX = toRect.left - boardRect.left + toRect.width / 2;
+    const toY = toRect.top - boardRect.top + toRect.height / 2;
+    
+    const arrowSVG = `
+        <svg class="move-arrow-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100;">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#FFD700" />
+                </marker>
+            </defs>
+            <line x1="${fromX}" y1="${fromY}" x2="${toX}" y2="${toY}" stroke="#FFD700" stroke-width="4" stroke-linecap="round" marker-end="url(#arrowhead)" />
+        </svg>
+    `;
+    
+    board.style.position = 'relative';
+    board.innerHTML += arrowSVG;
+}
+
+function clearMoveArrows() {
+    document.querySelectorAll('.move-arrow-svg').forEach(arrow => arrow.remove());
 }
 
 async function markExerciseCompleted() {

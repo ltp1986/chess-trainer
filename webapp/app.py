@@ -85,8 +85,8 @@ WATCH = config.get("watch_dir", DEFAULT_WATCH_DIR)
 OUT = os.path.join(os.path.dirname(__file__), "output")
 STATUS_FILE = os.path.join(OUT, "processing_status.json")
 PROGRESS_FILE = os.path.join(OUT, "learning_progress.json")
-DEPTH = 14
-MOVE_TIME = 0.8
+DEPTH = 20
+MOVE_TIME = 3.0
 MISTAKE = -100
 
 DIFFICULTY_THRESHOLD = {
@@ -98,6 +98,20 @@ DIFFICULTY_THRESHOLD = {
 MAX_DEMONSTRATION_MISTAKES = 5
 
 engine = None
+
+analysis_progress = {}
+
+def update_analysis_progress(file_id, status, current, total, message):
+    analysis_progress[file_id] = {
+        "status": status,
+        "current": current,
+        "total": total,
+        "message": message,
+        "updated_at": datetime.datetime.now().isoformat()
+    }
+
+def get_analysis_progress(file_id):
+    return analysis_progress.get(file_id)
 
 def get_engine():
     global engine
@@ -240,14 +254,18 @@ def analyze_pgn(pgn_path):
                 continue
 
             delta = scores_after[i] - scores_before[i]
+            actual_move = moves[i]
+
+            # 安全获取pv键，避免KeyError
+            info = eng.analyse(boards[i], chess.engine.Limit(depth=12, time=0.2))
+            pv = info.get("pv", [])
+            best_move = pv[0].uci() if pv else None
+            
+            # 如果玩家走的就是最佳着法，跳过（不是失误）
+            if best_move == actual_move.uci():
+                continue
+
             if delta < MISTAKE:
-                actual_move = moves[i]
-
-                # 第156行核心修复：安全获取pv键，避免KeyError
-                info = eng.analyse(boards[i], chess.engine.Limit(depth=12, time=0.2))
-                pv = info.get("pv", [])
-                best_move = pv[0].uci() if pv else None
-
                 mistakes.append({
                     "step": i + 1,
                     "loss": abs(delta),
@@ -308,6 +326,36 @@ def set_watch_dir():
     logger.info(f"PGN目录已更新为: {WATCH}")
     return jsonify({"success": True, "watch_dir": WATCH, "message": "PGN目录设置成功"})
 
+@app.route('/api/analysis/progress/<file_id>', methods=['GET'])
+def api_get_analysis_progress(file_id):
+    progress = get_analysis_progress(file_id)
+    
+    if not progress:
+        return jsonify({
+            "status": "not_found",
+            "message": "未找到分析任务"
+        })
+    
+    total = progress["total"] if progress["total"] > 0 else 1
+    progress_percent = round(progress["current"] / total * 100, 2)
+    
+    return jsonify({
+        "status": progress["status"],
+        "progress": progress_percent,
+        "current_step": progress["current"],
+        "total_steps": progress["total"],
+        "message": progress["message"],
+        "updated_at": progress["updated_at"]
+    })
+
+@app.route('/api/analysis/cancel/<file_id>', methods=['POST'])
+def api_cancel_analysis(file_id):
+    if file_id in analysis_progress:
+        analysis_progress[file_id]["status"] = "cancelled"
+        analysis_progress[file_id]["message"] = "分析已取消"
+        return jsonify({"success": True, "message": "分析已取消"})
+    return jsonify({"success": False, "message": "未找到分析任务"})
+
 @app.route('/api/analyze/<filename>')
 def analyze_file(filename):
     # 修复1：URL解码中文文件名，解决%E8%B4%A5乱码找不到文件的问题
@@ -342,57 +390,65 @@ def analyze_file(filename):
             "message": "文件正在处理中，请稍后再试"
         })
 
-    game, mistakes = analyze_pgn(pgn_path)
-    if not game:
-        logger.error(f"解析PGN文件失败: {filename}")
-        return jsonify({"error": "PGN文件解析失败，请检查文件格式是否正确"}), 400
+    # 初始化进度
+    update_analysis_progress(filename, "processing", 0, 100, "开始分析...")
+    
+    try:
+        game, mistakes = analyze_pgn_with_progress(pgn_path, filename)
+        
+        if not game:
+            logger.error(f"解析PGN文件失败: {filename}")
+            return jsonify({"error": "PGN文件解析失败，请检查文件格式是否正确"}), 400
 
-    # 根据难度筛选习题
-    min_loss = DIFFICULTY_THRESHOLD[difficulty]
-    filtered_mistakes = [m for m in mistakes if m["loss"] >= min_loss]
+        # 根据难度筛选习题
+        min_loss = DIFFICULTY_THRESHOLD[difficulty]
+        filtered_mistakes = [m for m in mistakes if m["loss"] >= min_loss]
 
-    mistakes_for_frontend = []
-    for m in filtered_mistakes:
-        cause, idea = explain_loss(m["loss"])
-        tactic_exp = get_tactic_explanation(m["fen"], m["move"], m["best"], m["loss"])
-        mistakes_for_frontend.append({
-            "step": m["step"],
-            "loss": m["loss"],
-            "fen": m["fen"],
-            "turn": m["turn"],
-            "actual_move": m["move"],
-            "best_move": m["best"],
-            "cause": cause,
-            "idea": idea,
-            "tactic_exp": tactic_exp
+        mistakes_for_frontend = []
+        for m in filtered_mistakes:
+            cause, idea = generate_mistake_explanation(m["fen"], m["move"], m["best"], m["loss"])
+            tactic_exp = get_tactic_explanation(m["fen"], m["move"], m["best"], m["loss"])
+            mistakes_for_frontend.append({
+                "step": m["step"],
+                "loss": m["loss"],
+                "fen": m["fen"],
+                "turn": m["turn"],
+                "actual_move": m["move"],
+                "best_move": m["best"],
+                "cause": cause,
+                "idea": idea,
+                "tactic_exp": tactic_exp
+            })
+
+        exercises = []
+        for i, e in enumerate(filtered_mistakes, 1):
+            exercises.append({
+                "id": i,
+                "step": e["step"],
+                "fen": e["fen"],
+                "turn": e["turn"],
+                "best_move": e["best"],
+                "loss": e["loss"],
+                "actual_move": e["move"],
+                "description": f"第{e['step']}步 - 找出最佳着法"
+            })
+
+        logger.info(f"生成 {len(exercises)} 个习题（难度: {difficulty}，筛选阈值: {min_loss}cp）")
+        return jsonify({
+            "status": "completed",
+            "filename": filename,
+            "white": game.headers.get("White", "?"),
+            "black": game.headers.get("Black", "?"),
+            "result": game.headers.get("Result", "*"),
+            "difficulty": difficulty,
+            "total_mistakes": len(mistakes),
+            "filtered_mistakes": len(filtered_mistakes),
+            "mistakes": mistakes_for_frontend,
+            "exercises": exercises
         })
-
-    exercises = []
-    for i, e in enumerate(filtered_mistakes, 1):
-        exercises.append({
-            "id": i,
-            "step": e["step"],
-            "fen": e["fen"],
-            "turn": e["turn"],
-            "best_move": e["best"],
-            "loss": e["loss"],
-            "actual_move": e["move"],
-            "description": f"第{e['step']}步 - 找出最佳着法"
-        })
-
-    logger.info(f"生成 {len(exercises)} 个习题（难度: {difficulty}，筛选阈值: {min_loss}cp）")
-    return jsonify({
-        "status": "completed",
-        "filename": filename,
-        "white": game.headers.get("White", "?"),
-        "black": game.headers.get("Black", "?"),
-        "result": game.headers.get("Result", "*"),
-        "difficulty": difficulty,
-        "total_mistakes": len(mistakes),
-        "filtered_mistakes": len(filtered_mistakes),
-        "mistakes": mistakes_for_frontend,
-        "exercises": exercises
-    })
+    except Exception as e:
+        logger.error(f"分析PGN文件时出错: {str(e)}", exc_info=True)
+        return jsonify({"error": f"分析失败: {str(e)}"}), 500
 
 @app.route('/api/check_move', methods=['POST'])
 def check_move():
@@ -569,32 +625,266 @@ def get_best_move():
     return jsonify({"best_move": None})
 
 def explain_loss(loss):
-    if loss > 300:
+    if loss > 500:
+        return "严重失误，重大子力损失", "立即评估局面，寻找止损方案"
+    elif loss > 300:
         return "送子丢子，漏看战术", "必须保护子力，避开攻击线"
     elif loss > 150:
         return "关键格失守，被突破", "守住要点，加固防线"
     else:
         return "局面判断偏差", "改善子力位置，稳健防守"
 
-def get_tactic_explanation(board_fen, actual_move, best_move, loss):
+def generate_mistake_explanation(fen, actual_move, best_move, loss):
+    """生成更准确的错误解释，结合战术分析"""
+    if not fen or not actual_move:
+        return explain_loss(loss)
+    
+    try:
+        board = chess.Board(fen)
+        analysis = analyze_tactic_situation(fen, actual_move, best_move)
+        
+        piece_values = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 100}
+        piece_names = {'P': '兵', 'N': '马', 'B': '象', 'R': '车', 'Q': '后', 'K': '王'}
+        
+        cause = ""
+        idea = ""
+        
+        temp_board = board.copy()
+        move_obj = chess.Move.from_uci(actual_move)
+        
+        if move_obj in temp_board.legal_moves:
+            moved_piece = board.piece_at(move_obj.from_square)
+            moved_piece_type = moved_piece.symbol().upper() if moved_piece else ''
+            moved_piece_name = piece_names.get(moved_piece_type, '子')
+            
+            moved_to = chess.square_name(move_obj.to_square)
+            moved_from = chess.square_name(move_obj.from_square)
+            
+            before_capture = board.piece_at(move_obj.to_square)
+            temp_board.push(move_obj)
+            
+            if temp_board.is_capture(move_obj):
+                captured = temp_board.piece_at(move_obj.to_square)
+                
+                if captured and moved_piece:
+                    captured_value = piece_values.get(captured.symbol().upper(), 0)
+                    moved_value = piece_values.get(moved_piece.symbol().upper(), 0)
+                    
+                    attackers_after = temp_board.attackers(not board.turn, move_obj.to_square)
+                    defenders_after = temp_board.attackers(board.turn, move_obj.to_square)
+                    is_attacked_after = len(attackers_after) > len(defenders_after)
+                    
+                    if moved_value < captured_value:
+                        if is_attacked_after:
+                            cause = f"用{moved_piece_name}换{piece_names.get(captured.symbol().upper(), '子')}赚分，但新位置{moved_to}被攻击"
+                            idea = "评估是否值得冒险，准备后续应对"
+                        else:
+                            cause = f"用{moved_piece_name}换{piece_names.get(captured.symbol().upper(), '子')}，赚分"
+                            idea = "继续保持优势，扩大战果"
+                    elif moved_value > captured_value:
+                        if captured_value == 9:
+                            cause = f"牺牲{moved_piece_name}换后，需要精确计算后续战术"
+                            idea = "确认后续战术是否成立"
+                        else:
+                            cause = f"用{moved_piece_name}换{piece_names.get(captured.symbol().upper(), '子')}，亏分"
+                            idea = "避免得不偿失的交换"
+                    else:
+                        if before_capture:
+                            before_attacked = board.attackers(board.turn, move_obj.to_square)
+                            before_defended = board.attackers(not board.turn, move_obj.to_square)
+                            was_attacked_before = len(before_attacked) > len(before_defended)
+                            
+                            if was_attacked_before:
+                                cause = f"被迫用{moved_piece_name}兑{piece_names.get(captured.symbol().upper(), '子')}"
+                                idea = "这是必要的防御，局面保持平衡"
+                            elif is_attacked_after:
+                                cause = f"主动用{moved_piece_name}兑{piece_names.get(captured.symbol().upper(), '子')}，但新位置{moved_to}被攻击"
+                                idea = "评估是否需要立即保护或寻找反击"
+                            else:
+                                cause = f"同等子力交换"
+                                idea = "局面保持平衡，寻找其他机会"
+            
+                if not cause:
+                    attackers_after = temp_board.attackers(not board.turn, move_obj.to_square)
+                    defenders_after = temp_board.attackers(board.turn, move_obj.to_square)
+                    
+                    if len(attackers_after) > len(defenders_after):
+                        cause = f"{moved_piece_name}从{moved_from}走到{moved_to}后被攻击"
+                        idea = "保护被攻击的棋子或寻找反击机会"
+        
+        if not cause:
+            if loss > 300:
+                cause = "严重战术失误，子力损失"
+                idea = "重新评估局面，寻找最佳应对"
+            elif loss > 150:
+                cause = "局面优势丧失，需要改进"
+                idea = "加固防线，寻找反击机会"
+            elif loss > 100:
+                cause = "明显的局面判断偏差"
+                idea = "改善子力协调，保持局面平衡"
+            else:
+                cause = "细微的局面判断偏差"
+                idea = "注意局面细节，精确计算"
+        
+        return cause.strip(), idea.strip()
+    
+    except Exception as e:
+        logger.error(f"生成错误解释失败: {e}")
+        return explain_loss(loss)
+
+def analyze_tactic_situation(board_fen, actual_move, best_move):
+    """详细分析战术局面"""
+    analysis = {
+        'captured_piece': None,
+        'attacked_pieces': [],
+        'defended_pieces': [],
+        'threats': [],
+        'material_loss': 0,
+        'strategic_impact': '',
+        'concrete_example': '',
+        'capture_moves': [],
+        'forks': [],
+        'pins': []
+    }
+    
+    piece_values = {'P': 100, 'N': 300, 'B': 300, 'R': 500, 'Q': 900, 'K': 10000}
+    piece_names = {'P': '兵', 'N': '马', 'B': '象', 'R': '车', 'Q': '后', 'K': '王'}
+    
     try:
         board = chess.Board(board_fen)
-        move = chess.Move.from_uci(actual_move)
-        if move in board.legal_moves:
-            board.push(move)
-            if board.is_capture(move):
-                return "这步棋白白送掉了子力，没有获得任何补偿。"
+        current_player = board.turn
+        opponent = not current_player
+        actual_move_obj = chess.Move.from_uci(actual_move)
+        
+        if actual_move_obj in board.legal_moves:
+            temp_board = board.copy()
+            temp_board.push(actual_move_obj)
+            
+            if temp_board.is_check():
+                analysis['threats'].append('将军')
+            
+            if temp_board.is_capture(actual_move_obj):
+                captured = temp_board.piece_at(actual_move_obj.to_square)
+                if captured:
+                    analysis['captured_piece'] = {
+                        'symbol': captured.symbol(),
+                        'name': piece_names.get(captured.symbol().upper(), '未知'),
+                        'value': piece_values.get(captured.symbol().upper(), 0),
+                        'square': chess.square_name(actual_move_obj.to_square)
+                    }
+            
+            for square in chess.SQUARES:
+                piece = temp_board.piece_at(square)
+                if piece and piece.color == current_player:
+                    attackers = temp_board.attackers(not piece.color, square)
+                    defenders = temp_board.attackers(piece.color, square)
+                    
+                    attack_details = []
+                    for att_sq in attackers:
+                        att_piece = temp_board.piece_at(att_sq)
+                        if att_piece:
+                            attack_details.append({
+                                'name': piece_names.get(att_piece.symbol().upper(), '未知'),
+                                'from_square': chess.square_name(att_sq),
+                                'move': f"{chess.square_name(att_sq)}{chess.square_name(square)}"
+                            })
+                    
+                    if len(attackers) > len(defenders):
+                        analysis['attacked_pieces'].append({
+                            'piece': piece.symbol(),
+                            'name': piece_names.get(piece.symbol().upper(), '未知'),
+                            'square': chess.square_name(square),
+                            'attackers': len(attackers),
+                            'attack_details': attack_details,
+                            'defenders': len(defenders)
+                        })
+                        
+                        for attack in attack_details:
+                            analysis['capture_moves'].append({
+                                'captured_piece': piece_names.get(piece.symbol().upper(), '未知'),
+                                'captured_square': chess.square_name(square),
+                                'capturer': attack['name'],
+                                'capturer_from': attack['from_square'],
+                                'move': attack['move']
+                            })
+        
+        if best_move:
+            best_move_obj = chess.Move.from_uci(best_move)
+            if best_move_obj in board.legal_moves:
+                best_board = board.copy()
+                best_board.push(best_move_obj)
+                
+                attacked_squares_before = set()
+                for ap in analysis['attacked_pieces']:
+                    attacked_squares_before.add(ap['square'])
+                
+                for square in chess.SQUARES:
+                    piece = best_board.piece_at(square)
+                    if piece and piece.color == current_player:
+                        attackers = best_board.attackers(not piece.color, square)
+                        defenders = best_board.attackers(piece.color, square)
+                        square_name = chess.square_name(square)
+                        
+                        if square_name in attacked_squares_before and len(defenders) >= len(attackers):
+                            analysis['defended_pieces'].append({
+                                'piece': piece.symbol(),
+                                'name': piece_names.get(piece.symbol().upper(), '未知'),
+                                'square': square_name
+                            })
+    
+    except Exception as e:
+        logger.error(f"分析战术局面出错: {e}")
+    
+    return analysis
+
+def get_tactic_explanation(board_fen, actual_move, best_move, loss):
+    try:
+        analysis = analyze_tactic_situation(board_fen, actual_move, best_move)
+        parts = []
+        
+        if analysis['captured_piece']:
+            cap = analysis['captured_piece']
+            parts.append(f"⚠️ **立即丢子**: 你走{actual_move}后，{cap['name']}在{cap['square']}被对方直接吃掉")
+        
+        if analysis['capture_moves']:
+            for capture in analysis['capture_moves']:
+                parts.append(f"❌ **吃子威胁**: 对方{capture['capturer']}从{capture['capturer_from']}走{capture['move']}吃掉你在{capture['captured_square']}的{capture['captured_piece']}")
+        
+        if analysis['attacked_pieces']:
+            for ap in analysis['attacked_pieces']:
+                parts.append(f"🔴 **受攻子力**: {ap['name']}在{ap['square']}")
+                if 'attack_details' in ap and ap['attack_details']:
+                    for attack in ap['attack_details']:
+                        parts.append(f"   → 被{attack['name']}从{attack['from_square']}攻击，对方可走{attack['move']}吃")
+        
+        if analysis['threats']:
+            parts.append(f"⚔️ **即时威胁**: {', '.join(analysis['threats'])}")
+        
+        if analysis['defended_pieces'] and best_move:
+            defended_names = ", ".join([f"{dp['name']}({dp['square']})" for dp in analysis['defended_pieces']])
+            parts.append(f"✅ **正招作用**: {best_move}保护了{defended_names}，避免被吃")
         
         if loss > 300:
-            return "这步棋导致子力损失或局面崩溃，正招可以避免重大损失。"
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（重大损失）")
+            parts.append("💡 **建议**: 优先保护受攻子力，避免送子")
         elif loss > 200:
-            return "这步棋让对手获得明显优势，正招能保持局面均衡。"
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（明显劣势）")
+            parts.append("💡 **建议**: 寻找更稳健的走法，保持局面平衡")
         elif loss > 150:
-            return "这步棋削弱了关键位置，正招能更好地巩固防线。"
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（轻微劣势）")
+            parts.append("💡 **建议**: 改善子力位置，加固防线")
         else:
-            return "这步棋稍有偏差，正招能更精确地处理局面。"
-    except:
-        return ""
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（微小偏差）")
+            parts.append("💡 **建议**: 注意局面细节，精确计算")
+        
+        if not parts:
+            return "这步棋导致局面劣势，需要改进。"
+        
+        return "\n".join(parts)
+    
+    except Exception as e:
+        logger.error(f"生成战术解释出错: {e}")
+        return f"这步棋导致约{loss/100:.1f}子的损失，正招{best_move}可以改善局面。"
 
 def format_pgn(moves):
     pgn_text = ""
@@ -630,7 +920,7 @@ def get_report(filename):
     
     mistakes_with_details = []
     for m in mistakes:
-        cause, idea = explain_loss(m["loss"])
+        cause, idea = generate_mistake_explanation(m["fen"], m["move"], m["best"], m["loss"])
         tactic_exp = get_tactic_explanation(m["fen"], m["move"], m["best"], m["loss"])
         mistakes_with_details.append({
             "step": m["step"],
@@ -1952,7 +2242,19 @@ def analyze_position_enhanced():
     })
 
 def generate_local_analysis(fen, move_number, turn):
-    board = chess.Board(fen)
+    try:
+        board = chess.Board(fen)
+    except ValueError as e:
+        logger.error(f"无效的FEN字符串: {e}")
+        return {
+            "evaluation": "无法评估",
+            "score": 0,
+            "position_type": "无效局面",
+            "key_tactics": [],
+            "recommended_moves": [],
+            "threats": [],
+            "strategic_advice": "FEN格式无效，请检查输入"
+        }
     is_white = turn == 'white'
     
     try:
@@ -2475,6 +2777,8 @@ def get_token_status():
             status = monitor.get_usage_stats()
             status["circuit_breaker_active"] = False
             status["circuit_breaker_resets_at"] = None
+        
+        status["api_key_configured"] = bool(DOUBAO_API_KEY)
         
         return jsonify(status)
     except Exception as e:

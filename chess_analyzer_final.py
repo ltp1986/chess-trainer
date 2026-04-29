@@ -143,30 +143,156 @@ def format_line(board, moves):
     
     return " ".join(result)
 
-def get_tactic_explanation(board, actual_move, best_move, loss):
-    """生成战术解释，说明为什么正招更好"""
-    try:
-        # 检查是否送子
-        temp = board.copy()
-        if actual_move in temp.legal_moves:
-            temp.push(actual_move)
-            # 检查走完后是否被吃子
-            if temp.is_capture(actual_move):
-                return "这步棋白白送掉了子力，没有获得任何补偿。"
-        
-        # 根据失分程度给出解释
-        if loss > 300:
-            return "这步棋导致子力损失或局面崩溃，正招可以避免重大损失。"
-        elif loss > 200:
-            return "这步棋让对手获得明显优势，正招能保持局面均衡。"
-        elif loss > 150:
-            return "这步棋削弱了关键位置，正招能更好地巩固防线。"
-        else:
-            return "这步棋稍有偏差，正招能更精确地处理局面。"
-    except:
-        return ""
+def analyze_tactic_situation(board, actual_move, best_move):
+    """详细分析战术局面"""
+    analysis = {
+        'captured_piece': None,
+        'attacked_pieces': [],
+        'defended_pieces': [],
+        'threats': [],
+        'material_loss': 0,
+        'strategic_impact': '',
+        'concrete_example': '',
+        'capture_moves': [],
+        'forks': [],
+        'pins': []
+    }
     
-    return ""
+    piece_values = {'P': 100, 'N': 300, 'B': 300, 'R': 500, 'Q': 900, 'K': 10000}
+    piece_names = {'P': '兵', 'N': '马', 'B': '象', 'R': '车', 'Q': '后', 'K': '王'}
+    
+    try:
+        current_player = board.turn
+        opponent = not current_player
+        
+        if actual_move in board.legal_moves:
+            temp_board = board.copy()
+            temp_board.push(actual_move)
+            
+            if temp_board.is_check():
+                analysis['threats'].append('将军')
+            
+            if temp_board.is_capture(actual_move):
+                captured = temp_board.piece_at(actual_move.to_square)
+                if captured:
+                    analysis['captured_piece'] = {
+                        'symbol': captured.symbol(),
+                        'name': piece_names.get(captured.symbol().upper(), '未知'),
+                        'value': piece_values.get(captured.symbol().upper(), 0),
+                        'square': chess.square_name(actual_move.to_square)
+                    }
+            
+            for square in chess.SQUARES:
+                piece = temp_board.piece_at(square)
+                if piece and piece.color == current_player:
+                    attackers = temp_board.attackers(not piece.color, square)
+                    defenders = temp_board.attackers(piece.color, square)
+                    
+                    attack_details = []
+                    for att_sq in attackers:
+                        att_piece = temp_board.piece_at(att_sq)
+                        if att_piece:
+                            attack_details.append({
+                                'name': piece_names.get(att_piece.symbol().upper(), '未知'),
+                                'from_square': chess.square_name(att_sq),
+                                'move': f"{chess.square_name(att_sq)}{chess.square_name(square)}"
+                            })
+                    
+                    if len(attackers) > len(defenders):
+                        analysis['attacked_pieces'].append({
+                            'piece': piece.symbol(),
+                            'name': piece_names.get(piece.symbol().upper(), '未知'),
+                            'square': chess.square_name(square),
+                            'attackers': len(attackers),
+                            'attack_details': attack_details,
+                            'defenders': len(defenders)
+                        })
+                        
+                        for attack in attack_details:
+                            analysis['capture_moves'].append({
+                                'captured_piece': piece_names.get(piece.symbol().upper(), '未知'),
+                                'captured_square': chess.square_name(square),
+                                'capturer': attack['name'],
+                                'capturer_from': attack['from_square'],
+                                'move': attack['move']
+                            })
+        
+        if best_move and best_move in board.legal_moves:
+            best_board = board.copy()
+            best_board.push(best_move)
+            
+            attacked_squares_before = set()
+            for ap in analysis['attacked_pieces']:
+                attacked_squares_before.add(ap['square'])
+            
+            for square in chess.SQUARES:
+                piece = best_board.piece_at(square)
+                if piece and piece.color == current_player:
+                    attackers = best_board.attackers(not piece.color, square)
+                    defenders = best_board.attackers(piece.color, square)
+                    square_name = chess.square_name(square)
+                    
+                    if square_name in attacked_squares_before and len(defenders) >= len(attackers):
+                        analysis['defended_pieces'].append({
+                            'piece': piece.symbol(),
+                            'name': piece_names.get(piece.symbol().upper(), '未知'),
+                            'square': square_name
+                        })
+    
+    except Exception as e:
+        print(f"  分析战术局面出错: {e}")
+    
+    return analysis
+
+def get_tactic_explanation(board, actual_move, best_move, loss):
+    """生成详细的战术解释"""
+    try:
+        analysis = analyze_tactic_situation(board, actual_move, best_move)
+        parts = []
+        
+        if analysis['captured_piece']:
+            cap = analysis['captured_piece']
+            parts.append(f"⚠️ **立即丢子**: 你走{actual_move.uci()}后，{cap['name']}在{cap['square']}被对方直接吃掉")
+        
+        if analysis['capture_moves']:
+            for capture in analysis['capture_moves']:
+                parts.append(f"❌ **吃子威胁**: 对方{capture['capturer']}从{capture['capturer_from']}走{capture['move']}吃掉你在{capture['captured_square']}的{capture['captured_piece']}")
+        
+        if analysis['attacked_pieces']:
+            for ap in analysis['attacked_pieces']:
+                parts.append(f"🔴 **受攻子力**: {ap['name']}在{ap['square']}")
+                if 'attack_details' in ap and ap['attack_details']:
+                    for attack in ap['attack_details']:
+                        parts.append(f"   → 被{attack['name']}从{attack['from_square']}攻击，对方可走{attack['move']}吃")
+        
+        if analysis['threats']:
+            parts.append(f"⚔️ **即时威胁**: {', '.join(analysis['threats'])}")
+        
+        if analysis['defended_pieces'] and best_move:
+            defended_names = ", ".join([f"{dp['name']}({dp['square']})" for dp in analysis['defended_pieces']])
+            parts.append(f"✅ **正招作用**: {best_move.uci()}保护了{defended_names}，避免被吃")
+        
+        if loss > 300:
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（重大损失）")
+            parts.append("💡 **建议**: 优先保护受攻子力，避免送子")
+        elif loss > 200:
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（明显劣势）")
+            parts.append("💡 **建议**: 寻找更稳健的走法，保持局面平衡")
+        elif loss > 150:
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（轻微劣势）")
+            parts.append("💡 **建议**: 改善子力位置，加固防线")
+        else:
+            parts.append(f"💰 **损失评估**: 约{loss/100:.1f}子（微小偏差）")
+            parts.append("💡 **建议**: 注意局面细节，精确计算")
+        
+        if not parts:
+            return "这步棋导致局面劣势，需要改进。"
+        
+        return "\n".join(parts)
+    
+    except Exception as e:
+        print(f"  生成战术解释出错: {e}")
+        return f"这步棋导致约{loss/100:.1f}子的损失，正招{best_move.uci() if best_move else '未知'}可以改善局面。"
 
 # ===================== 核心分析（评分逻辑100%修正） =====================
 def analyze(pgn_path):
@@ -237,13 +363,15 @@ def analyze(pgn_path):
                 continue
 
             delta = scores_after[i] - scores_before[i]
+            best_move = bests[i]
+            actual_move = moves[i]
+            
+            # 如果玩家走的就是最佳着法，跳过（不是失误）
+            if best_move == actual_move:
+                continue
+                
+            # 只有当失分超过阈值时才标记为失误
             if delta < MISTAKE:
-                best_move = bests[i]
-                actual_move = moves[i]
-                # 如果引擎首选就是玩家走的棋，从合法着法中找一个不同的
-                if best_move == actual_move:
-                    alternatives = [m for m in legal_moves_list[i] if m != actual_move]
-                    best_move = alternatives[0] if alternatives else None
                 # 获取正招的后续变化线
                 best_line = get_best_line(boards[i+1], best_move) if best_move else []
                 tactic_exp = get_tactic_explanation(boards[i+1], actual_move, best_move, abs(delta))
@@ -257,7 +385,8 @@ def analyze(pgn_path):
                     "best_line": best_line,
                     "tactic_exp": tactic_exp
                 })
-        except:
+        except Exception as e:
+            print(f"  分析第{i+1}步出错: {e}")
             continue
 
     mistakes = sorted(mistakes, key=lambda x: x["step"])
