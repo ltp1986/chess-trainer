@@ -116,14 +116,35 @@ class ChessTrainer {
 
     processAnalysis(data) {
         console.log('📊 处理分析数据...');
-        this.mistakes = data.mistakes || [];
+        console.log('原始数据:', data);
+        
+        this.mistakes = data.mistakes || data.demonstration_mistakes || [];
         this.exercises = data.exercises || [];
+        
+        if (this.mistakes.length === 0 && data.filtered_mistakes > 0) {
+            console.warn('⚠️ 检测到有筛选后的失误但没有mistakes字段，尝试从exercises重建');
+            this.mistakes = this.exercises.map((ex, index) => ({
+                step: ex.step,
+                loss: ex.loss,
+                fen: ex.fen,
+                turn: ex.turn,
+                actual_move: ex.actual_move || '未知',
+                best_move: ex.best_move,
+                cause: '原因分析',
+                idea: '改进思路',
+                tactic_exp: '战术解释'
+            }));
+        }
+        
+        console.log(`✅ 处理完成: ${this.mistakes.length}个失误, ${this.exercises.length}个习题`);
         
         this.updateMistakeList();
         this.updateProgress(0);
         
         if (this.mistakes.length > 0) {
             this.showMistake(0);
+        } else {
+            console.error('❌ 没有找到失误数据，请检查PGN文件和分析设置');
         }
         
         document.getElementById('exercise-total').textContent = this.exercises.length;
