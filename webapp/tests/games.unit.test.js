@@ -95,6 +95,20 @@ describe('棋局库 API 测试', () => {
       expect(result.streak).toBeGreaterThanOrEqual(0);
       expect(result.total_completed).toBeGreaterThanOrEqual(0);
     });
+
+    test('进度数据应该符合逻辑关系', () => {
+      const result = MockAPI.getTrainingProgress();
+      
+      expect(result.today_exercises).toBeLessThanOrEqual(result.weekly_exercises);
+      expect(result.weekly_exercises).toBeLessThanOrEqual(result.monthly_exercises);
+      expect(result.monthly_exercises).toBeLessThanOrEqual(result.total_completed);
+    });
+
+    test('连续训练天数应该合理', () => {
+      const result = MockAPI.getTrainingProgress();
+      
+      expect(result.streak).toBeLessThanOrEqual(365);
+    });
   });
 
   describe('训练计划 API', () => {
@@ -114,6 +128,24 @@ describe('棋局库 API 测试', () => {
       expect(dayPlan).toHaveProperty('day');
       expect(dayPlan).toHaveProperty('focus');
       expect(dayPlan).toHaveProperty('exercises');
+    });
+
+    test('训练计划总题数应该匹配各天之和', () => {
+      const result = MockAPI.getTrainingPlan();
+      const total = result.plan.reduce((sum, day) => sum + day.exercises, 0);
+      
+      expect(total).toBe(result.total_exercises);
+    });
+
+    test('训练计划应该包含合理的训练内容', () => {
+      const result = MockAPI.getTrainingPlan();
+      
+      const focusAreas = ['开局训练', '中局战术', '残局练习', '战术组合', '策略训练', '综合练习'];
+      result.plan.forEach(day => {
+        expect(focusAreas).toContain(day.focus);
+        expect(day.exercises).toBeGreaterThan(0);
+        expect(day.exercises).toBeLessThanOrEqual(20);
+      });
     });
   });
 

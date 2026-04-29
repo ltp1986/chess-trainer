@@ -142,9 +142,13 @@ const MockAPI = {
   
   getTrainingPlan: () => ({
     plan: [
-      { day: 1, focus: '开局训练', exercises: 5 },
+      { day: 1, focus: '开局训练', exercises: 6 },
       { day: 2, focus: '中局战术', exercises: 8 },
-      { day: 3, focus: '残局练习', exercises: 6 }
+      { day: 3, focus: '残局练习', exercises: 6 },
+      { day: 4, focus: '战术组合', exercises: 8 },
+      { day: 5, focus: '开局训练', exercises: 6 },
+      { day: 6, focus: '策略训练', exercises: 4 },
+      { day: 7, focus: '综合练习', exercises: 4 }
     ],
     duration: 7,
     total_exercises: 42
