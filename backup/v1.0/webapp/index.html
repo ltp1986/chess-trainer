@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国际象棋学习训练系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            min-height: 100vh;
+            background-color: #f3f4f6;
+        }
+        
+        #app.container {
+            padding: 0.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border: 2px solid #4a5568;
+            border-radius: 4px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 450px;
+            aspect-ratio: 1/1;
+        }
+
+        .square {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(24px, 4vw, 40px);
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+            position: relative;
+        }
+
+        .square.light { background-color: #f0d9b5; }
+        .square.dark { background-color: #b58863; }
+
+        .square:hover {
+            filter: brightness(1.15);
+        }
+
+        .square.selected {
+            background-color: #f7ec5c !important;
+            box-shadow: inset 0 0 0 3px #e6c200;
+        }
+
+        .square.last-move {
+            box-shadow: inset 0 0 0 4px #3498db;
+        }
+
+        .square.legal-move::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: rgba(0, 0, 0, 0.25);
+            border-radius: 50%;
+        }
+
+        .square.legal-move.capture::after {
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            border: 4px solid rgba(0, 0, 0, 0.25);
+            border-radius: 0;
+            box-sizing: border-box;
+        }
+
+        .square.correct-move {
+            animation: correctPulse 0.6s ease;
+            background-color: #27ae60 !important;
+        }
+
+        .square.wrong-move {
+            animation: wrongShake 0.5s ease;
+            background-color: #e74c3c !important;
+        }
+
+        @keyframes correctPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes wrongShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .piece {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+            font-family: 'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif;
+            font-weight: normal;
+            line-height: 1;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            transition: transform 0.1s ease;
+            z-index: 10;
+            min-width: 50px;
+            min-height: 50px;
+        }
+
+        .piece:hover {
+            transform: scale(1.1);
+        }
+
+        .piece.white { 
+            color: #f8f8f8; 
+            filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); 
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .piece.black { 
+            color: #1a1a1a; 
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+        }
+
+        .coord-file, .coord-rank {
+            position: absolute;
+            font-size: 10px;
+            font-weight: bold;
+            color: #666;
+            z-index: 100;
+        }
+
+        .coord-file { bottom: 1px; right: 2px; }
+        .coord-rank { top: 1px; left: 2px; }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .highlight-wrong .bg-red-50 {
+            animation: pulseRed 0.5s ease infinite;
+        }
+
+        .highlight-correct .bg-green-50 {
+            animation: pulseGreen 0.5s ease infinite;
+        }
+
+        @keyframes pulseRed {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes pulseGreen {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .exercise-card {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .exercise-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .exercise-card.active {
+            border-left: 4px solid #667eea;
+            background-color: #f7fafc;
+        }
+
+        .exercise-card.completed {
+            opacity: 0.7;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            transition: width 0.5s ease;
+        }
+
+        .tab-active {
+            background-color: #667eea !important;
+            color: white !important;
+        }
+
+        .locked-tab {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .remaining-mistake-item {
+            border-left: 3px solid #f59e0b;
+            padding-left: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-controls button {
+            min-width: 70px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-6 max-w-7xl">
+        <header class="mb-4">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">♟️ 国际象棋学习训练系统</h1>
+        </header>
+
+        <div id="file-selection" class="bg-white rounded-xl shadow-md p-4 mb-4">
+            <div class="flex flex-wrap gap-4 items-center">
+                <select id="pgn-select" class="flex-1 min-w-[200px] p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- 请选择PGN文件 --</option>
+                </select>
+                
+                <select id="difficulty-select" class="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="medium">中级难度 (≥150cp)</option>
+                    <option value="hard">高级难度 (≥250cp)</option>
+                </select>
+                
+                <button id="load-btn" class="btn-primary text-white px-4 py-2 rounded-lg font-medium">
+                    加载
+                </button>
+                
+                <div id="loading-indicator" class="loader hidden"></div>
+            </div>
+        </div>
+
+        <div id="main-content" class="hidden">
+            <div class="flex gap-2 mb-4">
+                <button id="report-tab" class="tab-btn tab-active px-4 py-2 bg-blue-500 text-white rounded-lg font-medium">
+                    📊 复盘演示
+                </button>
+                <button id="exercise-tab" class="tab-btn locked-tab px-4 py-2 bg-gray-200 text-gray-600 rounded-lg font-medium" disabled>
+                    📝 习题练习
+                </button>
+            </div>
+
+            <div id="report-view" class="grid grid-cols-1 lg:grid-cols-3 gap-2">
+                <div class="lg:col-span-1 space-y-2">
+                    <div class="bg-white rounded-xl shadow-md p-3">
+                        <h3 class="font-semibold mb-2 text-sm">复盘列表</h3>
+                        <div class="space-y-1.5 max-h-48 overflow-y-auto" id="report-mistake-list">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-3">
+                        <h3 class="font-semibold mb-2 text-sm">棋局信息</h3>
+                        <p class="text-xs text-gray-600">白方: <span id="white-player" class="font-medium"></span></p>
+                        <p class="text-xs text-gray-600">黑方: <span id="black-player" class="font-medium"></span></p>
+                        <p class="text-xs text-gray-600">结果: <span id="game-result" class="font-medium"></span></p>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-3">
+                        <h3 class="font-semibold mb-2 text-sm">进度状态</h3>
+                        <div class="w-full bg-gray-200 rounded-full h-1.5 mb-1.5">
+                            <div id="report-progress-bar" class="progress-bar bg-blue-500 h-1.5 rounded-full" style="width: 0%"></div>
+                        </div>
+                        <p id="report-progress-text" class="text-xs text-gray-600">0/0</p>
+                        <p id="report-status" class="text-xs mt-1.5"></p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 space-y-2">
+                    <div class="bg-white rounded-xl shadow-md p-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 id="report-title" class="font-semibold text-sm">请加载复盘数据</h3>
+                            <span id="turn-indicator" class="px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-200"></span>
+                        </div>
+
+                        <div class="flex justify-center mb-2">
+                            <div id="chess-board" class="chess-board">
+                            </div>
+                        </div>
+
+                        <div class="demo-controls flex justify-center gap-2">
+                            <button id="prev-demo-btn" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm hover:bg-gray-300 transition" disabled>
+                                ← 上一步
+                            </button>
+                            <button id="play-demo-btn" class="btn-primary text-white px-4 py-1 rounded-lg text-sm font-medium" disabled>
+                                ▶ 播放
+                            </button>
+                            <button id="pause-demo-btn" class="btn-warning text-white px-4 py-1 rounded-lg text-sm font-medium hidden" disabled>
+                                ⏸ 暂停
+                            </button>
+                            <button id="next-demo-btn" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-lg text-sm hover:bg-gray-300 transition" disabled>
+                                下一步 →
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <h3 class="font-semibold mb-3">失误分析</h3>
+                        <div id="report-analysis">
+                            <p class="text-gray-500 text-center py-8">请选择一个失误步骤查看详情</p>
+                        </div>
+                    </div>
+
+                    <div id="remaining-mistakes" class="bg-white rounded-xl shadow-md p-4 hidden">
+                        <h3 class="font-semibold mb-3">其他失误 (文字描述)</h3>
+                        <div id="remaining-mistakes-list">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="exercise-view" class="hidden grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="font-semibold">习题列表</h3>
+                            <span id="exercise-progress-text" class="text-xs text-gray-500">0/0</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-1 mb-3">
+                            <div id="exercise-progress-bar" class="progress-bar bg-blue-500 h-1 rounded-full" style="width: 0%"></div>
+                        </div>
+                        <div id="exercise-list" class="space-y-2 max-h-80 overflow-y-auto">
+                        </div>
+                    </div>
+
+                    <div id="exercise-game-info" class="bg-white rounded-xl shadow-md p-4 mt-4">
+                        <h3 class="font-semibold mb-2">棋局信息</h3>
+                        <p class="text-sm text-gray-600">白方: <span id="ex-white-player" class="font-medium"></span></p>
+                        <p class="text-sm text-gray-600">黑方: <span id="ex-black-player" class="font-medium"></span></p>
+                        <p class="text-sm text-gray-600">结果: <span id="ex-game-result" class="font-medium"></span></p>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 id="current-exercise-title" class="font-semibold">请选择一个习题</h3>
+                            <span id="ex-turn-indicator" class="px-2 py-1 rounded-full text-xs font-medium bg-gray-200"></span>
+                        </div>
+
+                        <div class="flex justify-center mb-4">
+                            <div id="exercise-board" class="chess-board">
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2 justify-center flex-wrap">
+                            <button id="hint-btn" class="btn-warning text-white px-3 py-1 rounded-lg text-xs font-medium" disabled>
+                                💡 提示
+                            </button>
+                            <button id="answer-btn" class="bg-gray-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-gray-700 transition" disabled>
+                                👁️ 显示答案
+                            </button>
+                            <button id="reset-btn" class="bg-gray-400 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-gray-500 transition" disabled>
+                                🔄 重置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-3 lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <h3 class="font-semibold mb-3">练习反馈</h3>
+
+                        <div id="feedback-panel" class="mb-3">
+                            <div id="feedback-content" class="p-3 rounded-lg">
+                            </div>
+                        </div>
+
+                        <div id="score-info" class="space-y-2">
+                            <div class="bg-gray-50 p-2 rounded-lg">
+                                <p class="text-xs text-gray-600">你的着法</p>
+                                <p id="user-move-display" class="text-sm font-mono font-bold text-gray-800"></p>
+                            </div>
+                            <div class="bg-gray-50 p-2 rounded-lg">
+                                <p class="text-xs text-gray-600">推荐着法</p>
+                                <p id="best-move-display" class="text-sm font-mono font-bold text-green-600"></p>
+                            </div>
+                            <div class="bg-gray-50 p-2 rounded-lg">
+                                <p class="text-xs text-gray-600">评分变化</p>
+                                <p id="score-delta" class="text-sm font-mono"></p>
+                            </div>
+                        </div>
+
+                        <div id="answer-panel" class="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg hidden">
+                            <p class="text-sm text-green-800 font-medium">✅ 正确答案</p>
+                            <p id="answer-move" class="text-sm font-mono font-bold text-green-600"></p>
+                            <p id="answer-explanation" class="text-xs text-green-700 mt-1"></p>
+                        </div>
+
+                        <div id="hint-panel" class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg hidden">
+                            <p class="text-sm text-yellow-800 font-medium">💡 提示</p>
+                            <p id="hint-text" class="text-xs text-yellow-700"></p>
+                        </div>
+
+                        <div class="flex gap-2 mt-4">
+                            <button id="prev-exercise-btn" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition text-sm" disabled>
+                                ← 上一题
+                            </button>
+                            <button id="next-exercise-btn" class="flex-1 btn-success text-white py-2 rounded-lg text-sm font-medium" disabled>
+                                下一题 →
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-4 mt-4">
+                        <h3 class="font-semibold mb-3">练习统计</h3>
+                        <div class="grid grid-cols-3 gap-3 text-center">
+                            <div>
+                                <p id="stat-correct" class="text-xl font-bold text-green-600">0</p>
+                                <p class="text-xs text-gray-500">正确</p>
+                            </div>
+                            <div>
+                                <p id="stat-wrong" class="text-xl font-bold text-red-600">0</p>
+                                <p class="text-xs text-gray-500">错误</p>
+                            </div>
+                            <div>
+                                <p id="stat-accuracy" class="text-xl font-bold text-blue-600">0%</p>
+                                <p class="text-xs text-gray-500">正确率</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PIECE_SYMBOLS = {
+            'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+            'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+        };
+
+        class ChessBoard {
+            constructor(elementId) {
+                this.element = document.getElementById(elementId);
+                this.fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+                this.forceTurn = null;
+                this.board = this.parseFEN(this.fen);
+                this.selectedSquare = null;
+                this.legalMoves = [];
+                this.lastMove = null;
+                this.onMoveCallback = null;
+                this.isFlipped = false;
+                this.init();
+            }
+
+            init() {
+                this.render();
+            }
+
+            render() {
+                this.element.innerHTML = '';
+
+                for (let row = 0; row < 8; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        const squareName = String.fromCharCode(97 + col) + (8 - row);
+                        const square = document.createElement('div');
+                        square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                        square.dataset.square = squareName;
+
+                        if (col === 0) {
+                            const rank = document.createElement('span');
+                            rank.className = 'coord-rank';
+                            rank.textContent = 8 - row;
+                            square.appendChild(rank);
+                        }
+                        if (row === 7) {
+                            const file = document.createElement('span');
+                            file.className = 'coord-file';
+                            file.textContent = String.fromCharCode(97 + col);
+                            square.appendChild(file);
+                        }
+
+                        const piece = this.board[row][col];
+                        if (piece) {
+                            const pieceEl = document.createElement('div');
+                            pieceEl.className = `piece ${piece === piece.toUpperCase() ? 'white' : 'black'}`;
+                            pieceEl.textContent = PIECE_SYMBOLS[piece];
+                            pieceEl.dataset.piece = piece;
+                            square.appendChild(pieceEl);
+                        }
+
+                        if (this.lastMove && (squareName === this.lastMove.from || squareName === this.lastMove.to)) {
+                            square.classList.add('last-move');
+                        }
+
+                        if (this.selectedSquare === squareName) {
+                            square.classList.add('selected');
+                        }
+
+                        if (this.legalMoves.includes(squareName)) {
+                            square.classList.add('legal-move');
+                            const piece = this.board[row][col];
+                            if (piece) square.classList.add('capture');
+                        }
+
+                        square.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.handleSquareClick(squareName);
+                        });
+                        this.element.appendChild(square);
+                    }
+                }
+            }
+
+            parseFEN(fen) {
+                const board = [];
+                const rows = fen.split(' ')[0].split('/');
+                for (let row of rows) {
+                    const boardRow = [];
+                    for (let char of row) {
+                        if (/\d/.test(char)) {
+                            for (let i = 0; i < parseInt(char); i++) boardRow.push(null);
+                        } else {
+                            boardRow.push(char);
+                        }
+                    }
+                    board.push(boardRow);
+                }
+                return board;
+            }
+
+            getTurn() {
+                return this.fen.split(' ')[1];
+            }
+
+            getPieceAt(square) {
+                const file = square.charCodeAt(0) - 97;
+                const rank = 8 - parseInt(square[1]);
+                return this.board[rank][file];
+            }
+
+            handleSquareClick(square) {
+                const piece = this.getPieceAt(square);
+                const turn = this.forceTurn;
+
+                if (this.selectedSquare) {
+                    const from = this.selectedSquare;
+                    const to = square;
+
+                    if (from === to) {
+                        this.clearSelection();
+                        return;
+                    }
+
+                    if (this.legalMoves.includes(to)) {
+                        const moveUCI = from + to;
+                        const movedPiece = this.getPieceAt(from);
+                        const isPromotion = (movedPiece === 'P' && to[1] === '8') || (movedPiece === 'p' && to[1] === '1');
+                        this.makeMove(isPromotion ? moveUCI + 'q' : moveUCI);
+                    } else {
+                        this.clearSelection();
+                    }
+                    return;
+                }
+
+                if (!piece) return;
+                const isMyPiece = (turn === 'w' && piece === piece.toUpperCase()) || (turn === 'b' && piece === piece.toLowerCase());
+                if (!isMyPiece) return;
+
+                this.selectSquare(square);
+            }
+
+            selectSquare(square) {
+                this.selectedSquare = square;
+                this.legalMoves = [];
+                this.render();
+                this.fetchLegalMoves(square);
+            }
+
+            async fetchLegalMoves(square) {
+                try {
+                    const response = await fetch('/api/legal_moves', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fen: this.fen, square: square })
+                    });
+                    const data = await response.json();
+                    if (data.legal_moves) {
+                        this.legalMoves = data.legal_moves;
+                        this.render();
+                    }
+                } catch (err) {
+                    this.legalMoves = [];
+                    this.render();
+                }
+            }
+
+            clearSelection() {
+                this.selectedSquare = null;
+                this.legalMoves = [];
+                this.render();
+            }
+
+            makeMove(uci) {
+                const from = uci.substring(0, 2);
+                const to = uci.substring(2, 4);
+                const fromCol = from.charCodeAt(0) - 97;
+                const fromRow = 7 - (parseInt(from[1]) - 1);
+                const toCol = to.charCodeAt(0) - 97;
+                const toRow = 7 - (parseInt(to[1]) - 1);
+
+                const piece = this.board[fromRow][fromCol];
+                
+                if (piece.toLowerCase() === 'p' && (toRow === 0 || toRow === 7)) {
+                    this.board[toRow][toCol] = piece === 'P' ? 'Q' : 'q';
+                } else {
+                    this.board[toRow][toCol] = piece;
+                }
+                this.board[fromRow][fromCol] = null;
+
+                this.fen = this.generateFEN();
+                
+                this.lastMove = { from, to };
+                this.clearSelection();
+                
+                if (this.onMoveCallback) {
+                    this.onMoveCallback(uci);
+                }
+            }
+
+            generateFEN() {
+                let fen = '';
+                const tempBoard = [...this.board].reverse();
+                for (let row of tempBoard) {
+                    let emptyCount = 0;
+                    for (let piece of row) {
+                        if (piece === null) {
+                            emptyCount++;
+                        } else {
+                            if (emptyCount > 0) {
+                                fen += emptyCount;
+                                emptyCount = 0;
+                            }
+                            fen += piece;
+                        }
+                    }
+                    if (emptyCount > 0) {
+                        fen += emptyCount;
+                    }
+                    fen += '/';
+                }
+                fen = fen.slice(0, -1);
+                
+                const turn = this.getTurn() === 'w' ? 'b' : 'w';
+                fen += ' ' + turn + ' KQkq - 0 1';
+                
+                return fen;
+            }
+
+            setPosition(fen) {
+                this.fen = fen;
+                this.board = this.parseFEN(fen);
+                this.clearSelection();
+                this.render();
+            }
+
+            setLastMove(from, to) {
+                this.lastMove = { from, to };
+                this.render();
+            }
+
+            highlightMove(square, type) {
+                const sq = this.element.querySelector(`[data-square="${square}"]`);
+                if (sq) {
+                    sq.classList.add(type === 'correct' ? 'correct-move' : 'wrong-move');
+                    setTimeout(() => sq.classList.remove('correct-move', 'wrong-move'), 1000);
+                }
+            }
+
+            showMoveAnimation(from, to) {
+                this.setLastMove(from, to);
+            }
+        }
+
+        class Logger {
+            static log(message, level = 'info', context = {}) {
+                const timestamp = new Date().toISOString();
+                const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+                console.log(logMessage, context);
+            }
+
+            static info(message, context = {}) {
+                this.log(message, 'info', context);
+            }
+
+            static error(message, context = {}) {
+                this.log(message, 'error', context);
+            }
+
+            static warning(message, context = {}) {
+                this.log(message, 'warning', context);
+            }
+        }
+
+        class ChessTrainer {
+            constructor() {
+                this.reportBoard = new ChessBoard('chess-board');
+                this.exerciseBoard = new ChessBoard('exercise-board');
+                
+                this.reportData = null;
+                this.exercises = [];
+                this.currentDemoIndex = -1;
+                this.currentExerciseIndex = -1;
+                this.stats = { correct: 0, wrong: 0 };
+                this.currentExercise = null;
+                this.answered = new Set();
+                this.reportWatched = false;
+                this.isPlaying = false;
+                this.playInterval = null;
+                this.currentFilename = null;
+                this.currentDifficulty = 'medium';
+
+                this.initEventListeners();
+                this.loadPGNFiles();
+                this.loadProgress();
+            }
+
+            initEventListeners() {
+                document.getElementById('load-btn').addEventListener('click', () => this.loadData());
+                document.getElementById('difficulty-select').addEventListener('change', (e) => {
+                    this.currentDifficulty = e.target.value;
+                });
+
+                document.getElementById('report-tab').addEventListener('click', () => this.showReportView());
+                document.getElementById('exercise-tab').addEventListener('click', () => this.showExerciseView());
+
+                document.getElementById('prev-demo-btn').addEventListener('click', () => this.prevDemo());
+                document.getElementById('play-demo-btn').addEventListener('click', () => this.playDemo());
+                document.getElementById('pause-demo-btn').addEventListener('click', () => this.pauseDemo());
+                document.getElementById('next-demo-btn').addEventListener('click', () => this.nextDemo());
+
+                document.getElementById('hint-btn').addEventListener('click', () => this.getHint());
+                document.getElementById('answer-btn').addEventListener('click', () => this.showAnswer());
+                document.getElementById('reset-btn').addEventListener('click', () => this.resetCurrent());
+                document.getElementById('prev-exercise-btn').addEventListener('click', () => this.prevExercise());
+                document.getElementById('next-exercise-btn').addEventListener('click', () => this.nextExercise());
+
+                this.exerciseBoard.onMoveCallback = (uci) => this.handleUserMove(uci);
+            }
+
+            async loadPGNFiles() {
+                try {
+                    const response = await fetch('/api/pgn_files');
+                    const data = await response.json();
+                    const select = document.getElementById('pgn-select');
+                    data.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        select.appendChild(option);
+                    });
+                } catch (error) {
+                    const select = document.getElementById('pgn-select');
+                    const option = document.createElement('option');
+                    option.value = 'demo';
+                    option.textContent = '演示数据（无后端）';
+                    select.appendChild(option);
+                }
+            }
+
+            async loadProgress() {
+                try {
+                    const response = await fetch('/api/progress/demo');
+                    const data = await response.json();
+                    this.reportWatched = data.report_watched;
+                    this.updateTabLock();
+                } catch (error) {
+                    this.reportWatched = false;
+                }
+            }
+
+            async saveProgress(reportWatched = false, reportProgress = 0, completedExercises = []) {
+                if (!this.currentFilename) return;
+                try {
+                    await fetch('/api/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: this.currentFilename,
+                            report_watched: reportWatched,
+                            report_progress: reportProgress,
+                            completed_exercises: completedExercises
+                        })
+                    });
+                } catch (error) {
+                    console.log('保存进度失败:', error);
+                }
+            }
+
+            async loadData() {
+                const select = document.getElementById('pgn-select');
+                const filename = select.value;
+
+                if (!filename) {
+                    alert('请选择一个PGN文件');
+                    return;
+                }
+
+                this.currentFilename = filename;
+                this.currentDifficulty = document.getElementById('difficulty-select').value;
+
+                const loading = document.getElementById('loading-indicator');
+                loading.classList.remove('hidden');
+
+                try {
+                    await Promise.all([
+                        this.loadReportData(filename),
+                        this.loadExerciseData(filename)
+                    ]);
+
+                    document.getElementById('main-content').classList.remove('hidden');
+                    document.getElementById('main-content').classList.add('fade-in');
+                    this.showReportView();
+                    
+                } catch (error) {
+                    this.loadDemoData();
+                } finally {
+                    loading.classList.add('hidden');
+                }
+            }
+
+            async loadReportData(filename) {
+                try {
+                    const response = await fetch(`/api/report/${encodeURIComponent(filename)}`);
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    this.reportData = data;
+                    this.renderReportList();
+                    this.updateGameInfo(data);
+
+                    if (data.demonstration_mistakes.length > 0) {
+                        this.loadDemo(0);
+                    }
+                } catch (error) {
+                    throw error;
+                }
+            }
+
+            async loadExerciseData(filename) {
+                try {
+                    const response = await fetch(`/api/analyze/${encodeURIComponent(filename)}?difficulty=${this.currentDifficulty}`);
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    this.exercises = data.exercises;
+                    this.updateExerciseGameInfo(data);
+                    
+                } catch (error) {
+                    throw error;
+                }
+            }
+
+            loadDemoData() {
+                this.reportData = {
+                    filename: 'demo.pgn',
+                    white: '演示白方',
+                    black: '演示黑方',
+                    result: '0-1',
+                    full_pgn: '1. d4 Nf6 2. c4 g6 3. Nc3 d5 4. Bg5 Ne4 5. Nxe4 dxe4 6. e3 c5',
+                    total_mistakes: 3,
+                    demonstration_mistakes: [
+                        {
+                            id: 1,
+                            step: 5,
+                            loss: 250,
+                            fen: 'rnbqkb1r/pppp1ppp/3n4/8/3pP3/2N5/PPP2PPP/R1BQKB1R b KQkq - 3 3',
+                            turn: 'black',
+                            actual_move: 'e4d5',
+                            best_move: 'd5c4',
+                            cause: '关键格失守，被突破',
+                            idea: '守住要点，加固防线',
+                            tactic_exp: '这步棋让对手获得明显优势，正招能保持局面均衡。'
+                        },
+                        {
+                            id: 2,
+                            step: 7,
+                            loss: 180,
+                            fen: 'rnbqkb1r/pppp1ppp/3n4/8/3pP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 3 4',
+                            turn: 'white',
+                            actual_move: 'd4d5',
+                            best_move: 'c4d5',
+                            cause: '局面判断偏差',
+                            idea: '改善子力位置，稳健防守',
+                            tactic_exp: '这步棋削弱了关键位置，正招能更好地巩固防线。'
+                        }
+                    ],
+                    remaining_mistakes: [
+                        { id: 3, step: 10, loss: 120, cause: '局面判断偏差', idea: '改善子力位置' }
+                    ]
+                };
+
+                this.exercises = [
+                    {
+                        id: 1,
+                        step: 5,
+                        fen: 'rnbqkb1r/pppp1ppp/3n4/8/3pP3/2N5/PPP2PPP/R1BQKB1R b KQkq - 3 3',
+                        turn: 'black',
+                        best_move: 'd5c4',
+                        loss: 250,
+                        description: '第5步 - 找出最佳着法'
+                    },
+                    {
+                        id: 2,
+                        step: 7,
+                        fen: 'rnbqkb1r/pppp1ppp/3n4/8/3pP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 3 4',
+                        turn: 'white',
+                        best_move: 'c4d5',
+                        loss: 180,
+                        description: '第7步 - 找出最佳着法'
+                    }
+                ];
+
+                this.renderReportList();
+                this.updateGameInfo(this.reportData);
+                this.updateExerciseGameInfo({
+                    white: '演示白方',
+                    black: '演示黑方',
+                    result: '0-1'
+                });
+
+                if (this.reportData.demonstration_mistakes.length > 0) {
+                    this.loadDemo(0);
+                }
+
+                document.getElementById('main-content').classList.remove('hidden');
+                document.getElementById('main-content').classList.add('fade-in');
+            }
+
+            updateGameInfo(data) {
+                document.getElementById('white-player').textContent = data.white || '?';
+                document.getElementById('black-player').textContent = data.black || '?';
+                document.getElementById('game-result').textContent = data.result || '*';
+            }
+
+            updateExerciseGameInfo(data) {
+                document.getElementById('ex-white-player').textContent = data.white || '?';
+                document.getElementById('ex-black-player').textContent = data.black || '?';
+                document.getElementById('ex-game-result').textContent = data.result || '*';
+            }
+
+            renderReportList() {
+                const container = document.getElementById('report-mistake-list');
+                container.innerHTML = '';
+
+                if (!this.reportData || !this.reportData.demonstration_mistakes) return;
+
+                this.reportData.demonstration_mistakes.forEach((mistake, index) => {
+                    const card = document.createElement('div');
+                    card.className = `p-3 rounded-lg border cursor-pointer transition ${
+                        index === this.currentDemoIndex ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                    }`;
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="font-medium text-sm">失误 ${mistake.id}</p>
+                                <p class="text-xs text-gray-500">第${mistake.step}步 · 失分${mistake.loss}cp</p>
+                            </div>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => this.loadDemo(index));
+                    container.appendChild(card);
+                });
+            }
+
+            loadDemo(index) {
+                if (!this.reportData || !this.reportData.demonstration_mistakes) return;
+                if (index < 0 || index >= this.reportData.demonstration_mistakes.length) return;
+
+                if (this.isPlaying) {
+                    this.pauseDemo();
+                }
+
+                this.currentDemoIndex = index;
+                const mistake = this.reportData.demonstration_mistakes[index];
+
+                this.reportBoard.setPosition(mistake.fen);
+                this.reportBoard.forceTurn = mistake.turn === 'white' ? 'w' : 'b';
+
+                document.getElementById('report-title').textContent = `失误 ${mistake.id} - 第${mistake.step}步`;
+                const turnEl = document.getElementById('turn-indicator');
+                turnEl.textContent = mistake.turn === 'white' ? '白方走' : '黑方走';
+                turnEl.className = `px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                    mistake.turn === 'white' ? 'bg-white text-gray-800 border' : 'bg-gray-800 text-white'
+                }`;
+
+                this.renderReportAnalysis(mistake);
+                this.renderReportList();
+                this.updateReportProgress();
+
+                this.updateDemoControls();
+            }
+
+            renderReportAnalysis(mistake) {
+                const container = document.getElementById('report-analysis');
+                container.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="bg-red-50 p-3 rounded-lg">
+                            <p class="text-sm font-medium text-red-800">❌ 错招</p>
+                            <p class="text-sm font-mono">${mistake.actual_move}</p>
+                            <p class="text-xs text-red-700 mt-1">原因：${mistake.cause}</p>
+                        </div>
+                        <div class="bg-green-50 p-3 rounded-lg">
+                            <p class="text-sm font-medium text-green-800">✅ 正招</p>
+                            <p class="text-sm font-mono">${mistake.best_move}</p>
+                            <p class="text-xs text-green-700 mt-1">思路：${mistake.idea}</p>
+                        </div>
+                        ${mistake.tactic_exp ? `<div class="bg-blue-50 p-3 rounded-lg">
+                            <p class="text-xs text-blue-700">💡 ${mistake.tactic_exp}</p>
+                        </div>` : ''}
+                    </div>
+                `;
+
+                const remainingDiv = document.getElementById('remaining-mistakes');
+                const remainingList = document.getElementById('remaining-mistakes-list');
+                
+                if (this.reportData.remaining_mistakes && this.reportData.remaining_mistakes.length > 0) {
+                    remainingDiv.classList.remove('hidden');
+                    remainingList.innerHTML = '';
+                    this.reportData.remaining_mistakes.forEach(m => {
+                        const item = document.createElement('div');
+                        item.className = 'remaining-mistake-item';
+                        item.innerHTML = `
+                            <p class="text-sm font-medium">第${m.step}步 · 失分${m.loss}cp</p>
+                            <p class="text-xs text-gray-600">${m.cause}</p>
+                            <p class="text-xs text-gray-500">思路：${m.idea}</p>
+                        `;
+                        remainingList.appendChild(item);
+                    });
+                } else {
+                    remainingDiv.classList.add('hidden');
+                }
+            }
+
+            updateReportProgress() {
+                const total = this.reportData.demonstration_mistakes.length;
+                const current = this.currentDemoIndex + 1;
+                
+                document.getElementById('report-progress-bar').style.width = `${(current / total) * 100}%`;
+                document.getElementById('report-progress-text').textContent = `${current}/${total}`;
+
+                if (current === total && !this.reportWatched) {
+                    this.reportWatched = true;
+                    this.updateTabLock();
+                    this.saveProgress(true, current, []);
+                    document.getElementById('report-status').innerHTML = '<span class="text-green-600">✓ 已完成复盘，可以进入习题练习</span>';
+                }
+            }
+
+            updateTabLock() {
+                const exerciseTab = document.getElementById('exercise-tab');
+                if (this.reportWatched) {
+                    exerciseTab.classList.remove('locked-tab');
+                    exerciseTab.disabled = false;
+                    exerciseTab.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)';
+                    exerciseTab.style.color = 'white';
+                } else {
+                    exerciseTab.classList.add('locked-tab');
+                    exerciseTab.disabled = true;
+                }
+            }
+
+            updateDemoControls() {
+                const prevBtn = document.getElementById('prev-demo-btn');
+                const playBtn = document.getElementById('play-demo-btn');
+                const pauseBtn = document.getElementById('pause-demo-btn');
+                const nextBtn = document.getElementById('next-demo-btn');
+
+                prevBtn.disabled = this.currentDemoIndex === 0;
+                nextBtn.disabled = this.currentDemoIndex === this.reportData.demonstration_mistakes.length - 1;
+                
+                playBtn.disabled = false;
+                pauseBtn.disabled = false;
+
+                if (this.isPlaying) {
+                    playBtn.classList.add('hidden');
+                    pauseBtn.classList.remove('hidden');
+                } else {
+                    playBtn.classList.remove('hidden');
+                    pauseBtn.classList.add('hidden');
+                }
+            }
+
+            prevDemo() {
+                if (this.currentDemoIndex > 0) {
+                    this.loadDemo(this.currentDemoIndex - 1);
+                }
+            }
+
+            nextDemo() {
+                if (this.currentDemoIndex < this.reportData.demonstration_mistakes.length - 1) {
+                    this.loadDemo(this.currentDemoIndex + 1);
+                }
+            }
+
+            playDemo() {
+                this.isPlaying = true;
+                this.updateDemoControls();
+                this.currentPlayPhase = 'initial';
+
+                this.playNextPhase();
+            }
+
+            playNextPhase() {
+                if (!this.isPlaying) return;
+
+                const mistake = this.reportData.demonstration_mistakes[this.currentDemoIndex];
+                
+                switch(this.currentPlayPhase) {
+                    case 'initial':
+                        this.reportBoard.setPosition(mistake.fen);
+                        this.currentPlayPhase = 'wrong';
+                        this.playInterval = setTimeout(() => this.playNextPhase(), 800);
+                        break;
+                    
+                    case 'wrong':
+                        this.reportBoard.move(mistake.actual_move);
+                        document.getElementById('report-analysis').classList.add('highlight-wrong');
+                        this.currentPlayPhase = 'back';
+                        this.playInterval = setTimeout(() => this.playNextPhase(), 1200);
+                        break;
+                    
+                    case 'back':
+                        this.reportBoard.setPosition(mistake.fen);
+                        document.getElementById('report-analysis').classList.remove('highlight-wrong');
+                        this.currentPlayPhase = 'correct';
+                        this.playInterval = setTimeout(() => this.playNextPhase(), 600);
+                        break;
+                    
+                    case 'correct':
+                        this.reportBoard.move(mistake.best_move);
+                        document.getElementById('report-analysis').classList.add('highlight-correct');
+                        this.currentPlayPhase = 'next';
+                        this.playInterval = setTimeout(() => this.playNextPhase(), 1200);
+                        break;
+                    
+                    case 'next':
+                        document.getElementById('report-analysis').classList.remove('highlight-correct');
+                        if (this.currentDemoIndex < this.reportData.demonstration_mistakes.length - 1) {
+                            this.loadDemo(this.currentDemoIndex + 1);
+                            this.currentPlayPhase = 'initial';
+                            this.playInterval = setTimeout(() => this.playNextPhase(), 500);
+                        } else {
+                            this.pauseDemo();
+                        }
+                        break;
+                }
+            }
+
+            pauseDemo() {
+                this.isPlaying = false;
+                this.updateDemoControls();
+                document.getElementById('report-analysis').classList.remove('highlight-wrong', 'highlight-correct');
+                if (this.playInterval) {
+                    clearTimeout(this.playInterval);
+                    this.playInterval = null;
+                }
+            }
+
+            showReportView() {
+                document.getElementById('report-tab').classList.add('tab-active');
+                document.getElementById('exercise-tab').classList.remove('tab-active');
+                document.getElementById('report-view').classList.remove('hidden');
+                document.getElementById('exercise-view').classList.add('hidden');
+            }
+
+            showExerciseView() {
+                if (!this.reportWatched) {
+                    alert('请先完成复盘演示！');
+                    return;
+                }
+
+                document.getElementById('report-tab').classList.remove('tab-active');
+                document.getElementById('exercise-tab').classList.add('tab-active');
+                document.getElementById('report-view').classList.add('hidden');
+                document.getElementById('exercise-view').classList.remove('hidden');
+
+                if (this.exercises.length > 0 && this.currentExerciseIndex < 0) {
+                    this.loadExercise(0);
+                }
+            }
+
+            renderExerciseList() {
+                const container = document.getElementById('exercise-list');
+                container.innerHTML = '';
+
+                this.exercises.forEach((ex, index) => {
+                    const card = document.createElement('div');
+                    card.className = `exercise-card p-3 rounded-lg border ${index === this.currentExerciseIndex ? 'active' : ''} ${this.answered.has(index) ? 'completed' : ''}`;
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="font-medium text-sm">习题 ${ex.id}</p>
+                                <p class="text-xs text-gray-500">${ex.description}</p>
+                            </div>
+                            <span class="status-icon text-lg"></span>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => this.loadExercise(index));
+                    container.appendChild(card);
+                });
+
+                this.updateExerciseProgress();
+            }
+
+            updateExerciseProgress() {
+                const total = this.exercises.length;
+                const completed = this.answered.size;
+                document.getElementById('exercise-progress-text').textContent = `${completed}/${total}`;
+                document.getElementById('exercise-progress-bar').style.width = `${(completed / total * 100)}%`;
+            }
+
+            loadExercise(index) {
+                if (index < 0 || index >= this.exercises.length) return;
+
+                this.currentExerciseIndex = index;
+                this.currentExercise = this.exercises[index];
+
+                this.exerciseBoard.setPosition(this.currentExercise.fen);
+                this.exerciseBoard.forceTurn = this.currentExercise.turn === 'white' ? 'w' : 'b';
+
+                document.getElementById('current-exercise-title').textContent =
+                    `习题 ${this.currentExercise.id} - 第${this.currentExercise.step}步`;
+
+                const turnText = this.currentExercise.turn === 'white' ? '白方走' : '黑方走';
+                const turnEl = document.getElementById('ex-turn-indicator');
+                turnEl.textContent = turnText;
+                turnEl.className = `px-2 py-1 rounded-full text-xs font-medium ${
+                    this.currentExercise.turn === 'white' ? 'bg-white text-gray-800 border' : 'bg-gray-800 text-white'
+                }`;
+
+                this.renderExerciseList();
+                this.hideFeedback();
+                this.hideAnswer();
+                this.hideHint();
+
+                document.getElementById('hint-btn').disabled = false;
+                document.getElementById('answer-btn').disabled = false;
+                document.getElementById('reset-btn').disabled = false;
+                document.getElementById('prev-exercise-btn').disabled = index === 0;
+                document.getElementById('next-exercise-btn').disabled = index === this.exercises.length - 1;
+            }
+
+            async handleUserMove(uci) {
+                if (!this.currentExercise) return;
+                if (this.answered.has(this.currentExerciseIndex)) {
+                    this.showFeedback('你已经回答过这道题了，请查看答案或切换到下一题。', 'info');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/check_move', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            fen: this.currentExercise.fen,
+                            move: uci,
+                            expected_best: this.currentExercise.best_move
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.valid) {
+                        this.showFeedback(result.message, 'error');
+                        return;
+                    }
+
+                    const from = uci.substring(0, 2);
+                    const to = uci.substring(2, 4);
+                    this.exerciseBoard.setLastMove(from, to);
+
+                    if (result.correct) {
+                        this.exerciseBoard.highlightMove(to, 'correct');
+                        this.stats.correct++;
+                        this.answered.add(this.currentExerciseIndex);
+                        this.showFeedback(result.message, 'success');
+                    } else {
+                        this.exerciseBoard.highlightMove(to, 'wrong');
+                        this.stats.wrong++;
+                        this.answered.add(this.currentExerciseIndex);
+                        this.showFeedback(result.message, result.feedback_type);
+                    }
+
+                    this.showScoreInfo(uci, result.best_move, result.delta);
+                    this.updateStats();
+                    this.updateExerciseProgress();
+                    this.renderExerciseList();
+                    this.saveProgress(true, this.reportData?.demonstration_mistakes?.length || 0, Array.from(this.answered));
+
+                } catch (error) {
+                    this.handleDemoCheck(uci);
+                }
+            }
+
+            handleDemoCheck(uci) {
+                const isCorrect = uci === this.currentExercise.best_move;
+                const from = uci.substring(0, 2);
+                const to = uci.substring(2, 4);
+                this.exerciseBoard.setLastMove(from, to);
+
+                if (isCorrect) {
+                    this.exerciseBoard.highlightMove(to, 'correct');
+                    this.stats.correct++;
+                    this.answered.add(this.currentExerciseIndex);
+                    this.showFeedback('✅ 正确！这就是最佳着法。', 'success');
+                } else {
+                    this.exerciseBoard.highlightMove(to, 'wrong');
+                    this.stats.wrong++;
+                    this.answered.add(this.currentExerciseIndex);
+                    this.showFeedback(`❌ 不正确。正确答案是 ${this.currentExercise.best_move}`, 'error');
+                }
+
+                this.showScoreInfo(uci, this.currentExercise.best_move, 0);
+                this.updateStats();
+                this.updateExerciseProgress();
+                this.renderExerciseList();
+            }
+
+            showFeedback(message, type) {
+                const panel = document.getElementById('feedback-panel');
+                const content = document.getElementById('feedback-content');
+
+                content.textContent = message;
+                content.className = `p-3 rounded-lg ${
+                    type === 'success' ? 'bg-green-100 text-green-800' :
+                    type === 'error' ? 'bg-red-100 text-red-800' :
+                    type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-blue-100 text-blue-800'
+                }`;
+            }
+
+            hideFeedback() {
+                const content = document.getElementById('feedback-content');
+                content.textContent = '';
+                content.className = '';
+            }
+
+            showScoreInfo(userMove, bestMove, delta) {
+                document.getElementById('user-move-display').textContent = userMove;
+                document.getElementById('best-move-display').textContent = bestMove;
+                document.getElementById('score-delta').textContent = delta !== undefined ? 
+                    (delta >= 0 ? '+' : '') + delta + ' cp' : '';
+            }
+
+            updateStats() {
+                const total = this.stats.correct + this.stats.wrong;
+                const accuracy = total > 0 ? Math.round((this.stats.correct / total) * 100) : 0;
+
+                document.getElementById('stat-correct').textContent = this.stats.correct;
+                document.getElementById('stat-wrong').textContent = this.stats.wrong;
+                document.getElementById('stat-accuracy').textContent = accuracy + '%';
+            }
+
+            async getHint() {
+                try {
+                    const response = await fetch('/api/hint', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fen: this.currentExercise.fen })
+                    });
+                    const data = await response.json();
+                    document.getElementById('hint-text').textContent = data.hint;
+                    document.getElementById('hint-panel').classList.remove('hidden');
+                } catch (error) {
+                    document.getElementById('hint-text').textContent = '考虑移动一个能控制关键格子的棋子...';
+                    document.getElementById('hint-panel').classList.remove('hidden');
+                }
+            }
+
+            hideHint() {
+                document.getElementById('hint-panel').classList.add('hidden');
+            }
+
+            showAnswer() {
+                document.getElementById('answer-move').textContent = this.currentExercise.best_move;
+                document.getElementById('answer-explanation').textContent = '这是当前局面的最佳着法';
+                document.getElementById('answer-panel').classList.remove('hidden');
+            }
+
+            hideAnswer() {
+                document.getElementById('answer-panel').classList.add('hidden');
+            }
+
+            resetCurrent() {
+                if (this.currentExercise) {
+                    this.loadExercise(this.currentExerciseIndex);
+                }
+            }
+
+            prevExercise() {
+                if (this.currentExerciseIndex > 0) {
+                    this.loadExercise(this.currentExerciseIndex - 1);
+                }
+            }
+
+            nextExercise() {
+                if (this.currentExerciseIndex < this.exercises.length - 1) {
+                    this.loadExercise(this.currentExerciseIndex + 1);
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new ChessTrainer();
+        });
+    </script>
+</body>
+</html>

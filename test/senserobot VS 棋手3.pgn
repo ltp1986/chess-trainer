@@ -1,0 +1,15 @@
+[Event "null"]
+[Site "null"]
+[Date "2026-04-25 21:07:16"]
+[Round "0"]
+[White "棋手"]
+[Black "senserobot_19"]
+[Result "0-1"]
+[PlyCount "null"]
+[TimeControl "-"]
+
+1. d4 d5 2. c4 dxc4 3. e4 Nf6 4. e5 Nfd7 5. e6 Nb6 6. exf7+ Kxf7 7. Nf3 Nc6 8. Nc3 
+e6 9. Be2 Be7 10. a4 a5 11. h4 Rf8 12. h5 h6 13. Qc2 Kg8 14. Bxh6 Nxd4 15. Qg6 Bf6 
+16. Ng5 Re8 17. Qf7+ Kh8 18. Rd1 Rg8 19. Qg6 Bxg5 20. Bxg5 Nc2+ 21. Kf1 Qe8 22. Qxe8 
+Rxe8 23. h6 Nb4 24. hxg7+ Kxg7 25. Bh6+ Kg8 26. Bh5 Bd7 27. Bxe8 Bxe8 28. Ne4 Bxa4 
+29. Nf6+ Kf7 30. Ng4 Bxd1 0-1

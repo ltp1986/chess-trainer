@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>调试前端交互</title>
+    <script>
+        // 模拟后端返回
+        const mockLegalMoves = ['f3', 'f4'];
+        
+        // 模拟 handleSquareClick 逻辑
+        function handleSquareClick(selectedSquare, clickedSquare, legalMoves) {
+            console.log(`选中: ${selectedSquare}, 点击: ${clickedSquare}`);
+            console.log(`合法着法: ${legalMoves}`);
+            
+            if (selectedSquare && selectedSquare !== clickedSquare) {
+                const from = selectedSquare;
+                const to = clickedSquare;
+                
+                console.log(`检查 ${to} 是否在合法着法中...`);
+                console.log(`legalMoves.includes('${to}'): ${legalMoves.includes(to)}`);
+                
+                if (legalMoves.includes(to)) {
+                    const moveUCI = from + to;
+                    console.log(`✅ 合法着法: ${moveUCI}`);
+                    return moveUCI;
+                } else {
+                    console.log(`❌ ${to} 不是合法着法`);
+                    return null;
+                }
+            }
+            return null;
+        }
+        
+        // 测试
+        console.log('=== 测试前端交互 ===');
+        console.log();
+        
+        // 测试1：选中f2，点击f3
+        console.log('测试1: 选中f2，点击f3');
+        const result1 = handleSquareClick('f2', 'f3', mockLegalMoves);
+        console.log();
+        
+        // 测试2：选中f2，点击f4
+        console.log('测试2: 选中f2，点击f4');
+        const result2 = handleSquareClick('f2', 'f4', mockLegalMoves);
+        console.log();
+        
+        // 测试3：选中f2，点击g3（非法）
+        console.log('测试3: 选中f2，点击g3（非法）');
+        const result3 = handleSquareClick('f2', 'g3', mockLegalMoves);
+    </script>
+</head>
+<body>
+    <h1>打开浏览器控制台查看调试结果</h1>
+</body>
+</html>

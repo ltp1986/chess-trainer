@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国际象棋棋盘</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            border: 3px solid #4a5568;
+            border-radius: 4px;
+            margin: 0 auto 20px;
+        }
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        .square.light {
+            background-color: #f0d9b5;
+        }
+        .square.dark {
+            background-color: #b58863;
+        }
+        .square.selected {
+            background-color: #f7ec5c !important;
+        }
+        .square.legal {
+            background-color: #d4edda !important;
+        }
+        .piece {
+            z-index: 10;
+        }
+        .piece.white {
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        .piece.black {
+            color: #000;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>♟️ 国际象棋棋盘</h1>
+        
+        <div class="status" id="status">白方走棋</div>
+        
+        <div id="chess-board" class="chess-board">
+            <!-- 棋盘将由JS生成 -->
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="resetBoard()">重置棋盘</button>
+            <button class="btn btn-secondary" onclick="undoMove()">撤销走子</button>
+            <button class="btn btn-primary" onclick="startNewGame()">新游戏</button>
+        </div>
+    </div>
+
+    <script>
+        let board = [];
+        let selectedSquare = null;
+        let legalMoves = [];
+        let currentPlayer = 'white';
+        let moveHistory = [];
+
+        const pieceSymbols = {
+            'white': { 'king': '♔', 'queen': '♕', 'rook': '♖', 'bishop': '♗', 'knight': '♘', 'pawn': '♙' },
+            'black': { 'king': '♚', 'queen': '♛', 'rook': '♜', 'bishop': '♝', 'knight': '♞', 'pawn': '♟' }
+        };
+
+        function initializeBoard() {
+            board = Array(8).fill(null).map(() => Array(8).fill(null));
+            
+            // 黑方棋子
+            board[0][0] = { type: 'rook', color: 'black' };
+            board[0][1] = { type: 'knight', color: 'black' };
+            board[0][2] = { type: 'bishop', color: 'black' };
+            board[0][3] = { type: 'queen', color: 'black' };
+            board[0][4] = { type: 'king', color: 'black' };
+            board[0][5] = { type: 'bishop', color: 'black' };
+            board[0][6] = { type: 'knight', color: 'black' };
+            board[0][7] = { type: 'rook', color: 'black' };
+            
+            for (let i = 0; i < 8; i++) {
+                board[1][i] = { type: 'pawn', color: 'black' };
+            }
+            
+            // 白方棋子
+            for (let i = 0; i < 8; i++) {
+                board[6][i] = { type: 'pawn', color: 'white' };
+            }
+            board[7][0] = { type: 'rook', color: 'white' };
+            board[7][1] = { type: 'knight', color: 'white' };
+            board[7][2] = { type: 'bishop', color: 'white' };
+            board[7][3] = { type: 'queen', color: 'white' };
+            board[7][4] = { type: 'king', color: 'white' };
+            board[7][5] = { type: 'bishop', color: 'white' };
+            board[7][6] = { type: 'knight', color: 'white' };
+            board[7][7] = { type: 'rook', color: 'white' };
+        }
+
+        function renderBoard() {
+            const boardElement = document.getElementById('chess-board');
+            boardElement.innerHTML = '';
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = `square ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+
+                    const piece = board[row][col];
+                    if (piece) {
+                        const pieceEl = document.createElement('div');
+                        pieceEl.className = `piece ${piece.color}`;
+                        pieceEl.textContent = pieceSymbols[piece.color][piece.type];
+                        square.appendChild(pieceEl);
+                    }
+
+                    square.addEventListener('click', () => handleSquareClick(row, col));
+                    boardElement.appendChild(square);
+                }
+            }
+        }
+
+        function handleSquareClick(row, col) {
+            const piece = board[row][col];
+
+            if (selectedSquare) {
+                const [fromRow, fromCol] = selectedSquare;
+                if (fromRow === row && fromCol === col) {
+                    // 点击同一格，取消选择
+                    selectedSquare = null;
+                    legalMoves = [];
+                    renderBoard();
+                    return;
+                }
+
+                if (piece && piece.color === currentPlayer) {
+                    // 点击自己的其他棋子，切换选择
+                    selectedSquare = [row, col];
+                    legalMoves = calculateLegalMoves(row, col);
+                    renderBoard();
+                    highlightLegalMoves();
+                    return;
+                }
+
+                // 尝试走子
+                if (isLegalMove(fromRow, fromCol, row, col)) {
+                    makeMove(fromRow, fromCol, row, col);
+                }
+                selectedSquare = null;
+                legalMoves = [];
+                renderBoard();
+            } else {
+                if (piece && piece.color === currentPlayer) {
+                    selectedSquare = [row, col];
+                    legalMoves = calculateLegalMoves(row, col);
+                    renderBoard();
+                    highlightLegalMoves();
+                }
+            }
+        }
+
+        function calculateLegalMoves(row, col) {
+            const legalMoves = [];
+            const piece = board[row][col];
+            if (!piece) return legalMoves;
+
+            switch (piece.type) {
+                case 'pawn':
+                    const direction = piece.color === 'white' ? -1 : 1;
+                    const startRow = piece.color === 'white' ? 6 : 1;
+                    
+                    // 前进一格
+                    if (row + direction >= 0 && row + direction < 8 && !board[row + direction][col]) {
+                        legalMoves.push([row + direction, col]);
+                        
+                        // 起始位置可以前进两格
+                        if (row === startRow && !board[row + 2 * direction][col]) {
+                            legalMoves.push([row + 2 * direction, col]);
+                        }
+                    }
+                    
+                    // 斜向吃子
+                    for (let dcol = -1; dcol <= 1; dcol += 2) {
+                        const newCol = col + dcol;
+                        const newRow = row + direction;
+                        if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+                            const target = board[newRow][newCol];
+                            if (target && target.color !== piece.color) {
+                                legalMoves.push([newRow, newCol]);
+                            }
+                        }
+                    }
+                    break;
+                case 'rook':
+                    // 上下左右四个方向
+                    const rookDirections = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                    for (const [dr, dc] of rookDirections) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const target = board[r][c];
+                            if (!target) {
+                                legalMoves.push([r, c]);
+                            } else {
+                                if (target.color !== piece.color) {
+                                    legalMoves.push([r, c]);
+                                }
+                                break;
+                            }
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                    break;
+                case 'knight':
+                    const knightMoves = [
+                        [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                        [1, -2], [1, 2], [2, -1], [2, 1]
+                    ];
+                    for (const [dr, dc] of knightMoves) {
+                        const r = row + dr;
+                        const c = col + dc;
+                        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const target = board[r][c];
+                            if (!target || target.color !== piece.color) {
+                                legalMoves.push([r, c]);
+                            }
+                        }
+                    }
+                    break;
+                case 'bishop':
+                    // 四个对角线方向
+                    const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                    for (const [dr, dc] of directions) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const target = board[r][c];
+                            if (!target) {
+                                legalMoves.push([r, c]);
+                            } else {
+                                if (target.color !== piece.color) {
+                                    legalMoves.push([r, c]);
+                                }
+                                break;
+                            }
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                    break;
+                case 'queen':
+                    // 皇后可以像车和象一样移动
+                    // 上下左右
+                    const queenDirections = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]];
+                    for (const [dr, dc] of queenDirections) {
+                        let r = row + dr;
+                        let c = col + dc;
+                        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const target = board[r][c];
+                            if (!target) {
+                                legalMoves.push([r, c]);
+                            } else {
+                                if (target.color !== piece.color) {
+                                    legalMoves.push([r, c]);
+                                }
+                                break;
+                            }
+                            r += dr;
+                            c += dc;
+                        }
+                    }
+                    break;
+                case 'king':
+                    // 国王可以向八个方向移动一格
+                    const kingMoves = [
+                        [-1, -1], [-1, 0], [-1, 1],
+                        [0, -1],          [0, 1],
+                        [1, -1],  [1, 0], [1, 1]
+                    ];
+                    for (const [dr, dc] of kingMoves) {
+                        const r = row + dr;
+                        const c = col + dc;
+                        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const target = board[r][c];
+                            if (!target || target.color !== piece.color) {
+                                legalMoves.push([r, c]);
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            return legalMoves;
+        }
+
+        function isLegalMove(fromRow, fromCol, toRow, toCol) {
+            return legalMoves.some(move => move[0] === toRow && move[1] === toCol);
+        }
+
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            const piece = board[fromRow][fromCol];
+            const capturedPiece = board[toRow][toCol];
+
+            moveHistory.push({
+                from: [fromRow, fromCol],
+                to: [toRow, toCol],
+                piece: piece,
+                captured: capturedPiece
+            });
+
+            // 处理兵的升变
+            if (piece.type === 'pawn' && (toRow === 0 || toRow === 7)) {
+                board[toRow][toCol] = { type: 'queen', color: piece.color };
+            } else {
+                board[toRow][toCol] = piece;
+            }
+            board[fromRow][fromCol] = null;
+
+            currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+            updateStatus();
+        }
+
+        function highlightLegalMoves() {
+            legalMoves.forEach(([row, col]) => {
+                const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                if (square) {
+                    square.classList.add('legal');
+                }
+            });
+            
+            // 高亮选中的格子
+            if (selectedSquare) {
+                const [row, col] = selectedSquare;
+                const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                if (square) {
+                    square.classList.add('selected');
+                }
+            }
+        }
+
+        function updateStatus() {
+            document.getElementById('status').textContent = `${currentPlayer === 'white' ? '白' : '黑'}方走棋`;
+        }
+
+        function resetBoard() {
+            initializeBoard();
+            selectedSquare = null;
+            legalMoves = [];
+            currentPlayer = 'white';
+            moveHistory = [];
+            renderBoard();
+            updateStatus();
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0) return;
+
+            const move = moveHistory.pop();
+            const [fromRow, fromCol] = move.from;
+            const [toRow, toCol] = move.to;
+
+            board[fromRow][fromCol] = move.piece;
+            board[toRow][toCol] = move.captured;
+
+            currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+            selectedSquare = null;
+            legalMoves = [];
+            renderBoard();
+            updateStatus();
+        }
+
+        function startNewGame() {
+            resetBoard();
+        }
+
+        // 初始化
+        initializeBoard();
+        renderBoard();
+        updateStatus();
+    </script>
+</body>
+</html>

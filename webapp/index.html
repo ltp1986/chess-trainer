@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>国际象棋学习训练系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chess-board {
+            display: flex;
+            flex-direction: column;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 
+                0 4px 6px rgba(0, 0, 0, 0.3),
+                0 10px 30px rgba(0, 0, 0, 0.15);
+            background: #1a1a1a;
+        }
+        
+        .chess-row {
+            display: flex;
+        }
+        
+        .rank-label {
+            width: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a1a;
+            color: #888;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Inter', -apple-system, sans-serif;
+        }
+        
+        .chess-square {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.15s ease;
+        }
+        
+        .chess-square.light-square {
+            background: linear-gradient(135deg, #f0d9b5 0%, #ebd4a4 100%);
+        }
+        
+        .chess-square.dark-square {
+            background: linear-gradient(135deg, #b58863 0%, #a67c52 100%);
+        }
+        
+        .chess-square:hover {
+            filter: brightness(1.1);
+        }
+        
+        .chess-square.selected {
+            box-shadow: inset 0 0 0 3px #4CAF50;
+        }
+        
+        .chess-square.hint-from {
+            background: linear-gradient(135deg, #66BB6A 0%, #43A047 100%) !important;
+            animation: pulse-green 1s infinite;
+        }
+        
+        .chess-square.hint-to {
+            background: linear-gradient(135deg, #FF8A80 0%, #FF5252 100%) !important;
+            animation: pulse-red 1s infinite;
+        }
+        
+        .chess-square.last-move {
+            box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.8);
+        }
+        
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        .chess-piece {
+            font-size: 36px;
+            line-height: 1;
+            transition: transform 0.15s ease;
+            user-select: none;
+        }
+        
+        .chess-piece:hover {
+            transform: scale(1.1);
+        }
+        
+        .chess-piece.piece-white {
+            color: #fff;
+            text-shadow: 
+                1px 1px 2px rgba(0,0,0,0.8),
+                2px 2px 4px rgba(0,0,0,0.4),
+                0 0 8px rgba(255,255,255,0.3);
+        }
+        
+        .chess-piece.piece-black {
+            color: #1a1a1a;
+            text-shadow: 
+                1px 1px 2px rgba(255,255,255,0.3),
+                2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .file-labels {
+            display: flex;
+            background: #1a1a1a;
+        }
+        
+        .file-label {
+            width: 48px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Inter', -apple-system, sans-serif;
+        }
+        
+        #practice-board {
+            display: flex;
+            justify-content: center;
+            padding: 8px;
+        }
+        
+        @media (max-width: 640px) {
+            .chess-square {
+                width: 36px;
+                height: 36px;
+            }
+            
+            .chess-piece {
+                font-size: 28px;
+            }
+            
+            .rank-label, .file-label {
+                width: 18px;
+                font-size: 10px;
+            }
+            
+            .file-label {
+                height: 18px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-6 max-w-7xl">
+        <header class="mb-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <h1 class="text-2xl font-bold text-gray-800">♟️ 国际象棋学习训练系统</h1>
+                <nav class="flex gap-2">
+                    <button id="nav-home" class="nav-btn active px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500 text-white">
+                        🏠 首页
+                    </button>
+                    <button id="nav-library" class="nav-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                        📚 点评库
+                    </button>
+                    <button id="nav-players" class="nav-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                        👤 棋手管理
+                    </button>
+                    <button id="nav-profile" class="nav-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                        📊 能力画像
+                    </button>
+                    <button id="nav-plan" class="nav-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                        📅 训练计划
+                    </button>
+                    <button id="nav-exercises" class="nav-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                        📝 错题集
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <div id="file-selection" class="mb-6">
+            <div class="bg-white rounded-xl shadow-md p-4">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-gray-600">PGN目录:</span>
+                        <input type="text" id="pgn-path-input" class="px-4 py-2 border border-gray-300 rounded-lg w-64" readonly>
+                        <button id="browse-btn" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                            📁 浏览
+                        </button>
+                    </div>
+                    <select id="pgn-select" class="px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="">-- 请选择PGN文件 --</option>
+                    </select>
+                    <select id="difficulty-select" class="px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="medium">中级难度 (≥150cp)</option>
+                        <option value="hard">高级难度 (≥250cp)</option>
+                    </select>
+                    <button id="load-btn" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+                        加载
+                    </button>
+                    <button id="demo-btn" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+                        🎮 加载演示数据
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-home" class="page-content">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <h2 class="text-lg font-bold mb-4">📝 复盘列表</h2>
+                        <div id="mistake-list" class="space-y-2">
+                            <p class="text-gray-500 text-center py-4">请选择PGN文件加载棋局</p>
+                        </div>
+                        <div id="progress-container" class="mt-4">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>复盘进度</span>
+                                <span id="progress-text">0/0</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div id="progress-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <p id="progress-status" class="text-sm text-gray-500 mt-2"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div id="board-container">
+                            <div id="board" class="grid grid-cols-8 gap-0 w-full max-w-md mx-auto aspect-square"></div>
+                            <div id="board-controls" class="flex justify-center gap-4 mt-4">
+                                <button id="prev-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition disabled:opacity-50">
+                                    ← 上一步
+                                </button>
+                                <button id="play-btn" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50">
+                                    ▶ 播放
+                                </button>
+                                <button id="pause-btn" class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition disabled:opacity-50">
+                                    ⏸ 暂停
+                                </button>
+                                <button id="next-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition disabled:opacity-50">
+                                    下一步 →
+                                </button>
+                            </div>
+                            <div id="turn-indicator" class="text-center mt-2 text-sm text-gray-600">
+                                白方走 ○
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-md p-4 mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div id="bad-move-panel" class="border-l-4 border-red-500 pl-4">
+                                <h3 class="font-semibold text-red-600">❌ 错招</h3>
+                                <p id="bad-move" class="text-lg font-mono mt-2">-</p>
+                                <p id="bad-cause" class="text-sm text-gray-600 mt-1">-</p>
+                            </div>
+                            <div id="good-move-panel" class="border-l-4 border-green-500 pl-4">
+                                <h3 class="font-semibold text-green-600">✅ 正招</h3>
+                                <p id="good-move" class="text-lg font-mono mt-2">-</p>
+                                <p id="good-idea" class="text-sm text-gray-600 mt-1">-</p>
+                            </div>
+                            <div id="tactic-panel" class="border-l-4 border-yellow-500 pl-4">
+                                <h3 class="font-semibold text-yellow-600">💡 战术解释</h3>
+                                <p id="tactic-exp" class="text-sm text-gray-600 mt-2">-</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 mt-4">
+                        <button id="review-tab" class="px-4 py-2 bg-blue-500 text-white rounded-lg">
+                            📖 复盘演示
+                        </button>
+                        <button id="exercise-tab" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg" disabled>
+                            📝 习题练习 🔒
+                        </button>
+                    </div>
+
+                    <div id="exercise-area" class="bg-white rounded-xl shadow-md p-4 mt-4 hidden">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-bold">📝 习题练习</h2>
+                            <div class="text-sm text-gray-600">
+                                第 <span id="exercise-current">1</span> / <span id="exercise-total">0</span> 题
+                            </div>
+                        </div>
+                        <div id="exercise-board" class="grid grid-cols-8 gap-0 w-full max-w-md mx-auto aspect-square"></div>
+                        <div class="flex justify-center gap-4 mt-4">
+                            <button id="exercise-hint" class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition">
+                                💡 提示
+                            </button>
+                            <button id="exercise-answer" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+                                ✅ 显示答案
+                            </button>
+                            <button id="exercise-next" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+                                ➡️ 下一题
+                            </button>
+                        </div>
+                        <div id="exercise-feedback" class="mt-4 text-center"></div>
+                    </div>
+
+                    <div id="remaining-mistakes" class="bg-white rounded-xl shadow-md p-4 mt-4 hidden">
+                        <h3 class="font-semibold mb-2">📋 其他失误（文字描述）</h3>
+                        <ul id="remaining-list" class="space-y-1"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-library" class="page-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">📚 点评库</h2>
+                <div class="flex gap-2">
+                    <button onclick="showAddGameModal()" class="bg-blue-500 text-white px-4 py-2 rounded-lg">
+                        + 添加棋局
+                    </button>
+                    <button onclick="addDemoGame()" class="bg-gray-500 text-white px-4 py-2 rounded-lg">
+                        + 添加演示棋局
+                    </button>
+                </div>
+            </div>
+            <div id="library-content">
+                <div class="text-center py-10">
+                    <p class="text-gray-500">暂无棋局数据</p>
+                    <button onclick="showAddGameModal()" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg">添加棋局</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-players" class="page-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">👤 棋手管理</h2>
+                <button onclick="showAddPlayerModal()" class="bg-blue-500 text-white px-4 py-2 rounded-lg">
+                    + 添加棋手
+                </button>
+            </div>
+            <div id="players-content">
+                <div class="text-center py-10">
+                    <p class="text-gray-500">暂无棋手数据</p>
+                    <button onclick="showAddPlayerModal()" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg">添加棋手</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-profile" class="page-content hidden">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-bold mb-4">📊 能力画像</h2>
+                <div id="profile-content">
+                    <div class="text-center py-10">
+                        <p class="text-gray-500">暂无能力画像</p>
+                        <button onclick="generateProfile()" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg">生成画像</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-plan" class="page-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-md p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold">📅 训练计划</h2>
+                            <button onclick="generatePlan()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">生成计划</button>
+                        </div>
+                        <div id="plan-content">
+                            <div class="text-center py-10">
+                                <p class="text-gray-500">暂无训练计划</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-6">
+                    <div id="training-progress-card" class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-lg font-bold mb-4">📊 训练进度</h3>
+                        <div id="progress-summary">
+                            <div class="text-center py-6">
+                                <p class="text-gray-500">加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="token-status-card" class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-lg font-bold mb-4">🔑 API状态</h3>
+                        <div id="token-status-content">
+                            <div class="text-center py-6">
+                                <p class="text-gray-500">加载中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-exercises" class="page-content hidden">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">📝 错题集</h2>
+                    <select id="exercises-player-select" class="px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="">-- 选择棋手 --</option>
+                    </select>
+                </div>
+                <div id="exercises-content">
+                    <div class="text-center py-10">
+                        <p class="text-gray-500">暂无错题集</p>
+                        <button onclick="generateExercises()" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg">生成错题集</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="player-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+                <h3 class="text-lg font-bold mb-4" id="modal-title">添加棋手</h3>
+                <form id="player-form">
+                    <input type="hidden" id="player-id">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">姓名</label>
+                        <input type="text" id="player-name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">等级</label>
+                        <select id="player-level" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="L1">L1 - 初阶</option>
+                            <option value="L2">L2 - 中阶</option>
+                            <option value="L3">L3 - 高阶</option>
+                            <option value="L4">L4 - 顶级</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">评级</label>
+                        <input type="number" id="player-rating" class="w-full px-3 py-2 border border-gray-300 rounded-lg" min="0" max="3000">
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closePlayerModal()" class="px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="game-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+                <h3 class="text-lg font-bold mb-4">添加棋局</h3>
+                <form id="game-form" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">选择PGN文件</label>
+                        <input type="file" id="game-file" class="w-full px-3 py-2 border border-gray-300 rounded-lg" accept=".pgn">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">或粘贴PGN内容</label>
+                        <textarea id="game-pgn" class="w-full px-3 py-2 border border-gray-300 rounded-lg" rows="6" placeholder="[Event \"Game\"]&#10;[White \"Player1\"]&#10;[Black \"Player2\"]&#10;[Result \"1-0\"]&#10;1. e4 e5 2. Nf3 Nc6 ..."></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">文件名</label>
+                        <input type="text" id="game-filename" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">白方棋手</label>
+                            <select id="white-player-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">-- 选择棋手 --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">黑方棋手</label>
+                            <select id="black-player-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">-- 选择棋手 --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" onclick="closeGameModal()" class="px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-lg">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="exercise-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">📝 错题练习</h3>
+                    <button onclick="closeExerciseModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div id="practice-board"></div>
+                        <div class="flex justify-center gap-4 mt-4">
+                            <button id="practice-hint" class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition">
+                                💡 提示
+                            </button>
+                            <button id="practice-answer" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+                                ✅ 显示答案
+                            </button>
+                            <button id="practice-close" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
+                                关闭
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                            <h4 class="font-semibold text-gray-800 mb-2">题目信息</h4>
+                            <p id="practice-filename" class="text-sm text-gray-600">棋局: -</p>
+                            <p id="practice-move-number" class="text-sm text-gray-600">第 - 步</p>
+                            <p id="practice-loss" class="text-sm text-gray-600">损失: - 分</p>
+                        </div>
+                        
+                        <div id="practice-feedback" class="min-h-[80px] rounded-lg p-4 text-center"></div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-800 mb-2">💡 提示</h4>
+                            <p id="practice-hint-text" class="text-sm text-gray-600">点击"提示"按钮获取帮助</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/chess-trainer.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/pages/library.js"></script>
+    <script src="js/pages/players.js"></script>
+    <script src="js/pages/profile.js"></script>
+    <script src="js/pages/plan.js"></script>
+    <script src="js/pages/exercises.js"></script>
+
+    <script>
+        console.log('🚀 国际象棋学习训练系统启动...');
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM加载完成');
+            try {
+                window.trainer = new ChessTrainer();
+                initNavigation();
+                initPgnDirectory();
+                console.log('✅ 初始化完成');
+            } catch (error) {
+                console.error('❌ 初始化失败:', error);
+            }
+        });
+
+        function initPgnDirectory() {
+            loadPgnFiles();
+            
+            document.getElementById('browse-btn').addEventListener('click', function() {
+                const newDir = prompt('请输入PGN文件夹路径:', document.getElementById('pgn-path-input').value);
+                if (newDir && newDir.trim()) {
+                    setWatchDir(newDir.trim());
+                }
+            });
+        }
+    </script>
+</body>
+</html>

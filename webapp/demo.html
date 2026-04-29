@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>棋盘测试 - 国际象棋</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="chess-board.js" defer></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        h1 { margin-bottom: 20px; color: #333; }
+
+        .board-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 64px);
+            grid-template-rows: repeat(8, 64px);
+            border: 3px solid #4a5568;
+            border-radius: 4px;
+        }
+
+        .chess-square {
+            width: 64px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            transition: background-color 0.1s;
+        }
+
+        .chess-square.light { background-color: #f0d9b5; }
+        .chess-square.dark { background-color: #b58863; }
+
+        .chess-square:hover { filter: brightness(1.1); }
+
+        .chess-square.selected {
+            background-color: #f7ec5c !important;
+            box-shadow: inset 0 0 0 3px #e6c200;
+        }
+
+        .chess-square.last-move {
+            box-shadow: inset 0 0 0 4px #3498db;
+        }
+
+        .chess-square.legal-target::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+        }
+
+        .chess-square.legal-target.capture::after {
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            border: 4px solid rgba(0, 0, 0, 0.3);
+            border-radius: 0;
+            box-sizing: border-box;
+        }
+
+        .chess-square.highlight-correct {
+            animation: pulseGreen 0.8s ease;
+            background-color: #27ae60 !important;
+        }
+
+        .chess-square.highlight-wrong {
+            animation: shake 0.5s ease;
+            background-color: #e74c3c !important;
+        }
+
+        @keyframes pulseGreen {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+        .chess-piece {
+            z-index: 10;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .chess-piece.white { color: #fff; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.8)); }
+        .chess-piece.black { color: #000; }
+
+        .coord-file, .coord-rank {
+            position: absolute;
+            font-size: 11px;
+            font-weight: bold;
+            color: rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        .coord-file { bottom: 2px; right: 4px; }
+        .coord-rank { top: 2px; left: 4px; }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #667eea;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover { background: #5a67d8; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .info p { margin: 5px 0; color: #555; }
+        .fen-text { font-family: monospace; font-size: 12px; word-break: break-all; color: #888; }
+    </style>
+</head>
+<body>
+    <h1>♟️ 国际象棋棋盘测试</h1>
+
+    <div class="board-container">
+        <div id="board"></div>
+    </div>
+
+    <div class="controls">
+        <button onclick="board.flip()">翻转棋盘</button>
+        <button onclick="board.undo()">悔棋</button>
+        <button onclick="resetBoard()">重置</button>
+        <button onclick="testHighlight()">测试高亮</button>
+    </div>
+
+    <div class="info">
+        <p><strong>当前回合:</strong> <span id="turn">白方</span></p>
+        <p><strong>最后走法:</strong> <span id="last-move">无</span></p>
+        <p><strong>FEN:</strong></p>
+        <p class="fen-text" id="fen"></p>
+    </div>
+
+    <script>
+        let board;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            board = new SimpleChessBoard('board', {
+                onMove: (move) => {
+                    console.log('走子:', move);
+                    document.getElementById('turn').textContent = board.getTurn() === 'w' ? '白方' : '黑方';
+                    document.getElementById('last-move').textContent = move.san;
+                    document.getElementById('fen').textContent = move.fen;
+                }
+            });
+            document.getElementById('fen').textContent = board.getFen();
+        });
+
+        function resetBoard() {
+            board.setPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+            document.getElementById('turn').textContent = '白方';
+            document.getElementById('last-move').textContent = '无';
+            document.getElementById('fen').textContent = board.getFen();
+        }
+
+        function testHighlight() {
+            board.highlightSquare('e4', 'correct');
+            setTimeout(() => board.highlightSquare('e5', 'wrong'), 400);
+        }
+    </script>
+</body>
+</html>
