@@ -72,22 +72,233 @@ describe('API Call Mock Tests', () => {
   });
 });
 
+describe('PGN File Functions', () => {
+  beforeEach(() => {
+    global.apiCall = jest.fn();
+    
+    global.loadPgnFiles = async function() {
+      try {
+        const response = await apiCall('/api/pgn_files');
+        const select = document.getElementById('pgn-select');
+        const pathInput = document.getElementById('pgn-path-input');
+        
+        if (pathInput && response.watch_dir) {
+          pathInput.value = response.watch_dir;
+        }
+        
+        if (select) {
+          select.innerHTML = '<option value="">-- 请选择PGN文件 --</option>';
+          response.files.forEach(file => {
+            const option = document.createElement('option');
+            option.value = file;
+            option.textContent = file;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('加载PGN文件列表失败:', error);
+      }
+    };
+    
+    global.getWatchDir = async function() {
+      try {
+        const response = await apiCall('/api/config/watch_dir');
+        const pathInput = document.getElementById('pgn-path-input');
+        if (pathInput) {
+          pathInput.value = response.watch_dir;
+        }
+        return response.watch_dir;
+      } catch (error) {
+        console.error('获取PGN目录失败:', error);
+        return '';
+      }
+    };
+    
+    global.setWatchDir = async function(newDir) {
+      try {
+        const response = await apiCall('/api/config/watch_dir', {
+          method: 'POST',
+          body: { watch_dir: newDir }
+        });
+        
+        if (response.success) {
+          const pathInput = document.getElementById('pgn-path-input');
+          if (pathInput) {
+            pathInput.value = response.watch_dir;
+          }
+          await loadPgnFiles();
+          alert('PGN目录设置成功！');
+        } else {
+          alert('设置失败: ' + response.message);
+        }
+      } catch (error) {
+        console.error('设置PGN目录失败:', error);
+        alert('设置失败: ' + error.message);
+      }
+    };
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('loadPgnFiles should populate select element', async () => {
+    global.apiCall.mockResolvedValue({
+      watch_dir: '/path/to/pgn',
+      files: ['game1.pgn', 'game2.pgn']
+    });
+    
+    const select = document.createElement('select');
+    select.id = 'pgn-select';
+    const pathInput = document.createElement('input');
+    pathInput.id = 'pgn-path-input';
+    document.body.appendChild(select);
+    document.body.appendChild(pathInput);
+    
+    await loadPgnFiles();
+    
+    expect(apiCall).toHaveBeenCalledWith('/api/pgn_files');
+    expect(pathInput.value).toBe('/path/to/pgn');
+    expect(select.innerHTML).toContain('game1.pgn');
+    expect(select.innerHTML).toContain('game2.pgn');
+    
+    document.body.removeChild(select);
+    document.body.removeChild(pathInput);
+  });
+
+  test('loadPgnFiles should handle missing elements', async () => {
+    global.apiCall.mockResolvedValue({
+      watch_dir: '/path/to/pgn',
+      files: ['game1.pgn']
+    });
+    
+    await loadPgnFiles();
+    
+    expect(apiCall).toHaveBeenCalledWith('/api/pgn_files');
+  });
+
+  test('loadPgnFiles should handle API error', async () => {
+    global.apiCall.mockRejectedValue(new Error('Network error'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    
+    await loadPgnFiles();
+    
+    expect(consoleErrorSpy).toHaveBeenCalledWith('加载PGN文件列表失败:', expect.any(Error));
+    
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('getWatchDir should return directory path', async () => {
+    global.apiCall.mockResolvedValue({ watch_dir: '/path/to/pgn' });
+    
+    const pathInput = document.createElement('input');
+    pathInput.id = 'pgn-path-input';
+    document.body.appendChild(pathInput);
+    
+    const result = await getWatchDir();
+    
+    expect(apiCall).toHaveBeenCalledWith('/api/config/watch_dir');
+    expect(result).toBe('/path/to/pgn');
+    expect(pathInput.value).toBe('/path/to/pgn');
+    
+    document.body.removeChild(pathInput);
+  });
+
+  test('getWatchDir should handle missing pathInput', async () => {
+    global.apiCall.mockResolvedValue({ watch_dir: '/path/to/pgn' });
+    
+    const result = await getWatchDir();
+    
+    expect(result).toBe('/path/to/pgn');
+  });
+
+  test('getWatchDir should return empty string on error', async () => {
+    global.apiCall.mockRejectedValue(new Error('Network error'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    
+    const result = await getWatchDir();
+    
+    expect(result).toBe('');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('获取PGN目录失败:', expect.any(Error));
+    
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('setWatchDir should update directory successfully', async () => {
+    global.apiCall.mockResolvedValue({ success: true, watch_dir: '/new/path' });
+    
+    const pathInput = document.createElement('input');
+    pathInput.id = 'pgn-path-input';
+    document.body.appendChild(pathInput);
+    
+    await setWatchDir('/new/path');
+    
+    expect(apiCall).toHaveBeenCalledWith('/api/config/watch_dir', {
+      method: 'POST',
+      body: { watch_dir: '/new/path' }
+    });
+    expect(pathInput.value).toBe('/new/path');
+    
+    document.body.removeChild(pathInput);
+  });
+
+  test('setWatchDir should handle failure response', async () => {
+    global.apiCall.mockResolvedValue({ success: false, message: 'Permission denied' });
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
+    
+    await setWatchDir('/new/path');
+    
+    expect(alertSpy).toHaveBeenCalledWith('设置失败: Permission denied');
+    
+    alertSpy.mockRestore();
+  });
+
+  test('setWatchDir should handle API error', async () => {
+    global.apiCall.mockRejectedValue(new Error('Network error'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
+    
+    await setWatchDir('/new/path');
+    
+    expect(consoleErrorSpy).toHaveBeenCalledWith('设置PGN目录失败:', expect.any(Error));
+    expect(alertSpy).toHaveBeenCalled();
+    
+    consoleErrorSpy.mockRestore();
+    alertSpy.mockRestore();
+  });
+});
+
 describe('Utils Module - DOM Functions', () => {
+  beforeEach(() => {
+    global.showLoading = function(container) {
+      if (!container) return;
+      container.innerHTML = `
+          <div class="text-center py-10">
+              <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+              <p class="mt-2 text-gray-500">加载中...</p>
+          </div>
+      `;
+    };
+  });
+
   test('showLoading should create loading element', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     
-    container.innerHTML = `
-        <div class="text-center py-10">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-            <p class="mt-2 text-gray-500">加载中...</p>
-        </div>
-    `;
+    showLoading(container);
     
     expect(container.innerHTML).toContain('加载中');
     expect(container.innerHTML).toContain('animate-spin');
     
     document.body.removeChild(container);
+  });
+
+  test('showLoading should handle null container', () => {
+    expect(() => showLoading(null)).not.toThrow();
+  });
+
+  test('showLoading should handle undefined container', () => {
+    expect(() => showLoading(undefined)).not.toThrow();
   });
 
   test('should parse PGN header correctly', () => {

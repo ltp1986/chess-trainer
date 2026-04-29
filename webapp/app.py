@@ -345,6 +345,22 @@ def analyze_file(filename):
     min_loss = DIFFICULTY_THRESHOLD[difficulty]
     filtered_mistakes = [m for m in mistakes if m["loss"] >= min_loss]
 
+    mistakes_for_frontend = []
+    for m in filtered_mistakes:
+        cause, idea = explain_loss(m["loss"])
+        tactic_exp = get_tactic_explanation(m["fen"], m["move"], m["best"], m["loss"])
+        mistakes_for_frontend.append({
+            "step": m["step"],
+            "loss": m["loss"],
+            "fen": m["fen"],
+            "turn": m["turn"],
+            "actual_move": m["move"],
+            "best_move": m["best"],
+            "cause": cause,
+            "idea": idea,
+            "tactic_exp": tactic_exp
+        })
+
     exercises = []
     for i, e in enumerate(filtered_mistakes, 1):
         exercises.append({
@@ -354,6 +370,7 @@ def analyze_file(filename):
             "turn": e["turn"],
             "best_move": e["best"],
             "loss": e["loss"],
+            "actual_move": e["move"],
             "description": f"第{e['step']}步 - 找出最佳着法"
         })
 
@@ -367,6 +384,7 @@ def analyze_file(filename):
         "difficulty": difficulty,
         "total_mistakes": len(mistakes),
         "filtered_mistakes": len(filtered_mistakes),
+        "mistakes": mistakes_for_frontend,
         "exercises": exercises
     })
 
