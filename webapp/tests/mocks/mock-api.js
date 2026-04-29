@@ -62,6 +62,9 @@ const MockAPI = {
   getPGNFiles: () => ({ files: mockPGNFiles }),
   
   analyzePGN: (filename) => {
+    if (!filename || filename.trim() === '') {
+      return { status: 'error', message: '文件名不能为空' };
+    }
     if (filename.includes('senserobot')) {
       return mockAnalysisResult;
     }
@@ -70,6 +73,15 @@ const MockAPI = {
   
   checkMove: (moveData) => {
     const { fen, move, best_move } = moveData;
+    
+    if (!fen || !move) {
+      return {
+        is_correct: false,
+        best_move: best_move || 'e2e4',
+        explanation: '参数无效'
+      };
+    }
+    
     return {
       is_correct: move === best_move,
       best_move: best_move,
@@ -77,11 +89,23 @@ const MockAPI = {
     };
   },
   
-  getLegalMoves: (fenData) => ({ moves: mockLegalMoves }),
+  getLegalMoves: (fenData) => {
+    const { fen } = fenData;
+    if (!fen) {
+      return { moves: [] };
+    }
+    return { moves: mockLegalMoves };
+  },
   
-  getBestMove: (fenData) => ({ best_move: 'e2e4', explanation: '这是当前局面的最佳着法' }),
+  getBestMove: (fenData) => ({ 
+    best_move: 'e2e4', 
+    explanation: '这是当前局面的最佳着法' 
+  }),
   
-  getHint: (fenData) => ({ hint: '考虑控制中心', piece: 'e2' }),
+  getHint: (fenData) => ({ 
+    hint: '考虑控制中心', 
+    piece: 'e2' 
+  }),
   
   getPlayers: () => ({
     players: [
@@ -90,7 +114,41 @@ const MockAPI = {
     ]
   }),
   
-  getPlayerExercises: (playerId) => ({ exercises: mockExercises })
+  getPlayerExercises: (playerId) => ({ 
+    exercises: mockExercises,
+    player_id: playerId,
+    total_count: mockExercises.length,
+    completed_count: 0
+  }),
+  
+  getPlayerStats: (playerId) => ({
+    player_id: playerId,
+    total_games: 15,
+    wins: 8,
+    losses: 5,
+    draws: 2,
+    avg_rating: 1400,
+    best_rating: 1550,
+    worst_rating: 1250
+  }),
+  
+  getTrainingProgress: () => ({
+    today_exercises: 5,
+    weekly_exercises: 23,
+    monthly_exercises: 89,
+    streak: 7,
+    total_completed: 320
+  }),
+  
+  getTrainingPlan: () => ({
+    plan: [
+      { day: 1, focus: '开局训练', exercises: 5 },
+      { day: 2, focus: '中局战术', exercises: 8 },
+      { day: 3, focus: '残局练习', exercises: 6 }
+    ],
+    duration: 7,
+    total_exercises: 42
+  })
 };
 
 module.exports = MockAPI;
