@@ -198,6 +198,50 @@ describe('Exercises Module Tests', () => {
       expect(mockFeedback.innerHTML).toBe('');
       document.getElementById = originalGetElementById;
     });
+
+    test('should not show hint when best_move is undefined', () => {
+      currentPracticeExercise = {
+        id: 1,
+        best_move: undefined,
+        filename: 'test.pgn',
+        move_number: 1,
+        loss: 150,
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+      };
+
+      const mockHintElement = { textContent: 'original text' };
+      const originalGetElementById = document.getElementById;
+      document.getElementById = jest.fn((id) => {
+        if (id === 'practice-hint-text') return mockHintElement;
+        return originalGetElementById.call(document, id);
+      });
+
+      expect(() => showPracticeHint()).not.toThrow();
+      expect(mockHintElement.textContent).toBe('original text');
+      document.getElementById = originalGetElementById;
+    });
+
+    test('should not show answer when best_move is undefined', () => {
+      currentPracticeExercise = {
+        id: 1,
+        best_move: undefined,
+        filename: 'test.pgn',
+        move_number: 1,
+        loss: 150,
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+      };
+
+      const mockFeedback = { innerHTML: '' };
+      const originalGetElementById = document.getElementById;
+      document.getElementById = jest.fn((id) => {
+        if (id === 'practice-feedback') return mockFeedback;
+        return originalGetElementById.call(document, id);
+      });
+
+      expect(() => showPracticeAnswer()).not.toThrow();
+      expect(mockFeedback.innerHTML).toBe('');
+      document.getElementById = originalGetElementById;
+    });
   });
 
   describe('Modal Operations', () => {
@@ -365,7 +409,7 @@ function checkMove(move) {
 }
 
 function showPracticeHint() {
-  if (!currentPracticeExercise) return;
+  if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
 
   const bestMove = currentPracticeExercise.best_move;
   const fromSquare = bestMove.substring(0, 2);
@@ -379,7 +423,7 @@ function showPracticeHint() {
 }
 
 function showPracticeAnswer() {
-  if (!currentPracticeExercise) return;
+  if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
 
   const bestMove = currentPracticeExercise.best_move;
   const feedback = document.getElementById('practice-feedback');

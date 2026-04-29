@@ -305,7 +305,7 @@ function highlightMove(move) {
 }
 
 function showPracticeHint() {
-    if (!currentPracticeExercise) return;
+    if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
     
     const bestMove = currentPracticeExercise.best_move;
     const fromSquare = bestMove.substring(0, 2);
@@ -326,7 +326,7 @@ function showPracticeHint() {
 }
 
 function showPracticeAnswer() {
-    if (!currentPracticeExercise) return;
+    if (!currentPracticeExercise || !currentPracticeExercise.best_move) return;
     
     const bestMove = currentPracticeExercise.best_move;
     const fromSquare = bestMove.substring(0, 2);
