@@ -69,11 +69,11 @@ const BoardUtils = {
   validateFEN(fen) {
     const parts = fen.split(' ');
     if (parts.length !== 6) return false;
-    
+
     const boardPart = parts[0];
     const rows = boardPart.split('/');
     if (rows.length !== 8) return false;
-    
+
     for (const row of rows) {
       let count = 0;
       for (const char of row) {
@@ -87,10 +87,13 @@ const BoardUtils = {
       }
       if (count !== 8) return false;
     }
-    
+
     if (!['w', 'b'].includes(parts[1])) return false;
-    if (!/^[-KQkq]*$/.test(parts[2])) return false;
-    
+    if (!/^(-|[KQkq]+)$/.test(parts[2])) return false;
+    if (!/^(-|[a-h][1-8])$/.test(parts[3])) return false;
+    if (!/^\d+$/.test(parts[4])) return false;
+    if (!/^\d+$/.test(parts[5]) || parseInt(parts[5]) < 1) return false;
+
     return true;
   },
 
