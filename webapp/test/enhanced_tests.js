@@ -99,10 +99,6 @@ async function runEnhancedTests() {
         total++;
         const playersBtn = document.getElementById('nav-players');
         if (playersBtn) {
-            // 记录切换前的状态
-            const playersPageBefore = document.getElementById('page-players');
-            const wasHidden = playersPageBefore ? playersPageBefore.classList.contains('hidden') : true;
-
             // 模拟点击
             playersBtn.click();
 

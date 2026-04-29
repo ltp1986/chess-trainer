@@ -61,7 +61,6 @@ async function editGameAssociation(gameId) {
         document.getElementById('game-modal').classList.remove('hidden');
         
         const form = document.getElementById('game-form');
-        const originalSubmit = form.onsubmit;
         
         form.onsubmit = async function(e) {
             e.preventDefault();

@@ -2,9 +2,6 @@
  * 前端测试运行器 - Node.js环境
  */
 
-const fs = require('fs');
-const path = require('path');
-
 // 加载验证模块
 const Validator = require('../js/validation.js');
 

@@ -348,6 +348,6 @@ class ChessTrainer {
         }
     }
 
-    handleBoardClick(e) {
+    handleBoardClick() {
     }
 }
