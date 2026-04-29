@@ -34,8 +34,9 @@
         }
         
         .chess-square {
-            width: 48px;
-            height: 48px;
+            width: 56px;
+            height: 56px;
+            flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -45,11 +46,11 @@
         }
         
         .chess-square.light-square {
-            background: linear-gradient(135deg, #f0d9b5 0%, #ebd4a4 100%);
+            background: linear-gradient(135deg, #f5e6d3 0%, #e8d4bc 100%);
         }
         
         .chess-square.dark-square {
-            background: linear-gradient(135deg, #b58863 0%, #a67c52 100%);
+            background: linear-gradient(135deg, #b8956f 0%, #a68056 100%);
         }
         
         .chess-square:hover {
@@ -85,10 +86,12 @@
         }
         
         .chess-piece {
-            font-size: 36px;
+            font-size: 40px;
             line-height: 1;
             transition: transform 0.15s ease;
             user-select: none;
+            position: relative;
+            z-index: 1;
         }
         
         .chess-piece:hover {
@@ -96,18 +99,20 @@
         }
         
         .chess-piece.piece-white {
-            color: #fff;
+            color: #ffffff;
             text-shadow: 
-                1px 1px 2px rgba(0,0,0,0.8),
-                2px 2px 4px rgba(0,0,0,0.4),
-                0 0 8px rgba(255,255,255,0.3);
+                1px 1px 3px rgba(0, 0, 0, 0.9),
+                2px 2px 6px rgba(0, 0, 0, 0.6),
+                0 0 12px rgba(255, 255, 255, 0.4),
+                0 0 20px rgba(255, 255, 255, 0.2);
+            filter: drop-shadow(2px 2px 3px rgba(0, 0, 0, 0.5));
         }
         
         .chess-piece.piece-black {
             color: #1a1a1a;
             text-shadow: 
-                1px 1px 2px rgba(255,255,255,0.3),
-                2px 2px 4px rgba(0,0,0,0.2);
+                1px 1px 2px rgba(255, 255, 255, 0.4),
+                2px 2px 4px rgba(0, 0, 0, 0.3);
         }
         
         .file-labels {
@@ -116,7 +121,7 @@
         }
         
         .file-label {
-            width: 48px;
+            width: 56px;
             height: 24px;
             display: flex;
             align-items: center;
@@ -127,20 +132,49 @@
             font-family: 'Inter', -apple-system, sans-serif;
         }
         
+        .coord-rank {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        .coord-file {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 2;
+        }
+        
         #practice-board {
             display: flex;
             justify-content: center;
             padding: 8px;
         }
         
+        #board, #exercise-board {
+            background: #1a1a1a;
+            border-radius: 4px;
+            padding: 4px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        
         @media (max-width: 640px) {
             .chess-square {
-                width: 36px;
-                height: 36px;
+                width: 40px;
+                height: 40px;
             }
             
             .chess-piece {
-                font-size: 28px;
+                font-size: 30px;
             }
             
             .rank-label, .file-label {
@@ -150,6 +184,10 @@
             
             .file-label {
                 height: 18px;
+            }
+            
+            .coord-rank, .coord-file {
+                font-size: 9px;
             }
         }
     </style>

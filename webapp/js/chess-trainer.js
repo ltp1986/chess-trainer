@@ -29,15 +29,28 @@ class ChessTrainer {
         console.log('🎨 初始化棋盘...');
         const colors = ['#f0d9b5', '#b58863'];
         let html = '';
+        const files = 'abcdefgh';
         
         for (let row = 7; row >= 0; row--) {
             for (let col = 0; col < 8; col++) {
                 const colorIndex = (row + col) % 2;
                 const squareName = this.getSquareName(col, row);
+                const rank = row + 1;
+                const file = files[col];
+                
+                let coordHtml = '';
+                if (col === 0) {
+                    coordHtml += `<span class="coord-rank">${rank}</span>`;
+                }
+                if (row === 0) {
+                    coordHtml += `<span class="coord-file">${file}</span>`;
+                }
+                
                 html += `
-                    <div class="square flex items-center justify-center cursor-pointer relative"
+                    <div class="chess-square flex items-center justify-center cursor-pointer relative"
                          data-square="${squareName}"
                          style="background-color: ${colors[colorIndex]}">
+                        ${coordHtml}
                     </div>
                 `;
             }
@@ -217,8 +230,11 @@ class ChessTrainer {
 
     displayPosition(fen, boardElement) {
         console.log('🎯 显示局面:', fen);
-        const squares = boardElement.querySelectorAll('.square');
-        squares.forEach(square => square.innerHTML = '');
+        const squares = boardElement.querySelectorAll('.chess-square');
+        squares.forEach(square => {
+            const children = square.querySelectorAll(':not(.coord-rank):not(.coord-file)');
+            children.forEach(child => child.remove());
+        });
         
         const parts = fen.split(' ');
         const piecePlacement = parts[0];
@@ -242,7 +258,10 @@ class ChessTrainer {
             const squareName = files[col] + (row + 1);
             const square = boardElement.querySelector(`[data-square="${squareName}"]`);
             if (square) {
-                square.innerHTML = this.getPieceSymbol(char);
+                const pieceEl = document.createElement('span');
+                pieceEl.className = `chess-piece ${char === char.toUpperCase() ? 'piece-white' : 'piece-black'}`;
+                pieceEl.textContent = this.getPieceSymbol(char);
+                square.appendChild(pieceEl);
             }
             col++;
         }
@@ -319,14 +338,14 @@ class ChessTrainer {
     }
 
     handleExerciseClick(e) {
-        const square = e.target.closest('.square');
+        const square = e.target.closest('.chess-square');
         if (!square) return;
         
         const squareName = square.dataset.square;
         const exercise = this.exercises[this.currentExerciseIndex];
         
         if (!this.selectedPiece) {
-            const piece = square.textContent.trim();
+            const piece = square.querySelector('.chess-piece');
             if (piece) {
                 this.selectedPiece = squareName;
                 square.style.outline = '3px solid blue';
@@ -336,7 +355,7 @@ class ChessTrainer {
             const to = squareName;
             const move = from + to;
             
-            document.querySelectorAll('.square').forEach(s => s.style.outline = '');
+            document.querySelectorAll('.chess-square').forEach(s => s.style.outline = '');
             this.selectedPiece = null;
             
             if (move === exercise.best_move) {
