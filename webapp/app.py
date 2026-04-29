@@ -1461,20 +1461,20 @@ def analyze_game_for_library(pgn_content):
         logger.error(f"分析棋局失败: {e}")
         return None
 
-@app.route('/api/library/games', methods=['GET'])
-def get_library_games():
+@app.route('/api/games', methods=['GET'])
+def get_games():
     games = list_games_in_library()
     return jsonify({"games": games})
 
-@app.route('/api/library/game/<game_id>', methods=['GET'])
-def get_library_game(game_id):
+@app.route('/api/game/<game_id>', methods=['GET'])
+def get_game(game_id):
     game = load_game_from_library(game_id)
     if game:
         return jsonify(game)
     return jsonify({"error": "棋局不存在"}), 404
 
-@app.route('/api/library/game', methods=['POST'])
-def add_library_game():
+@app.route('/api/game', methods=['POST'])
+def add_game():
     data = request.json
     pgn_content = data.get('pgn_content')
     filename = data.get('filename', '')
@@ -1520,13 +1520,13 @@ def add_library_game():
         }
     })
 
-@app.route('/api/library/game/<game_id>', methods=['DELETE'])
-def delete_library_game(game_id):
+@app.route('/api/game/<game_id>', methods=['DELETE'])
+def delete_game(game_id):
     if delete_game_from_library(game_id):
         return jsonify({"success": True, "message": "删除成功"})
     return jsonify({"error": "棋局不存在"}), 404
 
-@app.route('/api/library/game/<game_id>/associate', methods=['POST'])
+@app.route('/api/game/<game_id>/associate', methods=['POST'])
 def associate_game_players(game_id):
     data = request.json
     white_player_id = data.get('white_player_id', '')
