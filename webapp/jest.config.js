@@ -1,5 +1,5 @@
 /**
- * Jest 配置文件 - 简化版
+ * Jest 配置文件
  */
 
 module.exports = {
@@ -20,6 +20,22 @@ module.exports = {
   // 测试超时时间
   testTimeout: 30000,
 
-  // 跳过覆盖率检查
-  collectCoverage: false
+  // 报告器配置 - 生成 JSON 格式报告
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        outputDirectory: 'test-results',
+        outputName: 'junit-results.xml',
+        suiteName: 'chess-trainer-tests',
+        includeConsoleOutput: true
+      }
+    ]
+  ],
+
+  // 覆盖率配置
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['json', 'lcov', 'text']
 };
