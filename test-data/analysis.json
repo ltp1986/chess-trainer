@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-04-30T10:35:44.828519",
+  "total_failures": 5,
+  "analyzed_failures": [
+    {
+      "test_name": "test_api_analyze",
+      "file": "webapp/tests/api.test.js",
+      "error": "404 Not Found: GET /api/analyze/test.pgn",
+      "traceback": "Error: Request to GET /api/analyze/test.pgn returned 404",
+      "identified": true,
+      "category": "api_missing",
+      "fixable": true,
+      "suggestion": "API\u7aef\u70b9\u4e0d\u5b58\u5728"
+    },
+    {
+      "test_name": "test_file_not_found",
+      "file": "webapp/tests/integration.test.js",
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: 'output/library/test.json'",
+      "traceback": "FileNotFoundError at line 45",
+      "identified": true,
+      "category": "file_missing",
+      "fixable": true,
+      "suggestion": "\u6587\u4ef6\u6216\u76ee\u5f55\u7f3a\u5931"
+    },
+    {
+      "test_name": "test_import_error",
+      "file": "webapp/tests/utils.test.js",
+      "error": "ModuleNotFoundError: No module named 'nonexistent_module'",
+      "traceback": "ImportError at line 12",
+      "identified": true,
+      "category": "import_error",
+      "fixable": true,
+      "suggestion": "\u6a21\u5757\u5bfc\u5165\u5931\u8d25"
+    },
+    {
+      "test_name": "test_attribute_error",
+      "file": "webapp/tests/board-utils.test.js",
+      "error": "AttributeError: 'NoneType' object has no attribute 'strip'",
+      "traceback": "AttributeError at line 89",
+      "identified": true,
+      "category": "attribute_error",
+      "fixable": true,
+      "suggestion": "\u5c5e\u6027\u4e0d\u5b58\u5728"
+    },
+    {
+      "test_name": "test_syntax_error",
+      "file": "webapp/tests/syntax.test.js",
+      "error": "SyntaxError: invalid syntax at line 15",
+      "traceback": "SyntaxError at line 15",
+      "identified": true,
+      "category": "syntax_error",
+      "fixable": true,
+      "suggestion": "\u8bed\u6cd5\u9519\u8bef"
+    }
+  ],
+  "fixable_count": 5,
+  "unfixable_count": 0,
+  "categories": {
+    "api_missing": 1,
+    "file_missing": 1,
+    "import_error": 1,
+    "attribute_error": 1,
+    "syntax_error": 1
+  }
+}

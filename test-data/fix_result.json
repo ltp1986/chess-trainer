@@ -1,0 +1,12 @@
+{
+  "fixed_count": 4,
+  "total_fixable": 5,
+  "fixes": [
+    "\u521b\u5efa\u76ee\u5f55: output/library",
+    "\u521b\u5efa\u6587\u4ef6: output/library/test.json",
+    "\u5efa\u8bae\u5b89\u88c5\u6a21\u5757: nonexistent_module (\u8fd0\u884c: pip install nonexistent_module)",
+    "\u68c0\u67e5\u5c5e\u6027\u540d\u62fc\u5199: strip",
+    "\u8bed\u6cd5\u9519\u8bef\uff0c\u68c0\u67e5\u7b2c 15 \u884c"
+  ],
+  "success": true
+}

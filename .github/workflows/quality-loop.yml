@@ -1,0 +1,99 @@
+name: Quality Loop
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+
+jobs:
+  quality-loop:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_branch }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+    
+    - name: Download test artifacts
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: ${{ github.event.workflow_run.workflow_id }}
+        run_id: ${{ github.event.workflow_run.id }}
+        name: test-results
+        path: /tmp/test-results
+    
+    - name: Generate test report
+      run: |
+        python scripts/generate_test_report.py /tmp/test-results/results.json /tmp/report/test_report.json
+    
+    - name: Analyze failures
+      id: analyze
+      run: |
+        python scripts/analyze_failures.py /tmp/report/test_report.json /tmp/report/analysis.json
+        
+        FIXABLE=$(python -c "import json; f=open('/tmp/report/analysis.json'); d=json.load(f); print(d.get('fixable_count', 0))")
+        echo "fixable_count=$FIXABLE" >> $GITHUB_OUTPUT
+    
+    - name: Auto fix issues
+      id: autofix
+      if: ${{ steps.analyze.outputs.fixable_count > 0 }}
+      run: |
+        python scripts/auto_fix.py /tmp/report/analysis.json
+        
+        RESULT=$(cat /tmp/report/fix_result.json)
+        FIXED=$(python -c "import json; f=open('/tmp/report/fix_result.json'); d=json.load(f); print(d.get('fixed_count', 0))")
+        echo "fixed_count=$FIXED" >> $GITHUB_OUTPUT
+        
+        echo "$RESULT"
+        
+        if [ $FIXED -gt 0 ]; then
+          echo "success=true" >> $GITHUB_OUTPUT
+        else
+          echo "success=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create pull request
+      if: ${{ steps.autofix.outputs.success == 'true' }}
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        title: "Auto-fix: Quality Loop"
+        body: |
+          自动修复CI失败问题
+          
+          **修复数量**: ${{ steps.autofix.outputs.fixed_count }}
+          
+          **失败分析**:
+          - 可修复: ${{ steps.analyze.outputs.fixable_count }}
+          
+          **修复详情**:
+          - 自动修复已应用
+          
+          请审核并合并此PR。
+        branch: auto-fix/quality-loop-${{ github.run_id }}
+        commit-message: "auto-fix: 自动修复CI失败问题"
+    
+    - name: Send notification
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: ${{ steps.autofix.outputs.success == 'true' ? '#00ff00' : '#ff0000' }}
+        SLACK_TITLE: "Quality Loop Result"
+        SLACK_MESSAGE: |
+          CI失败已处理:
+          - 修复数量: ${{ steps.autofix.outputs.fixed_count }}/${{ steps.analyze.outputs.fixable_count }}
+          - 状态: ${{ steps.autofix.outputs.success == 'true' ? '✅ 自动修复成功' : '❌ 无法自动修复' }}
+          - 工作流: ${{ github.event.workflow_run.name }}
+          - 运行ID: ${{ github.event.workflow_run.id }}
