@@ -23,10 +23,10 @@ ERROR_PATTERNS = {
         "description": "API端点不存在"
     },
     "AssertionError": {
-        "pattern": r"AssertionError",
-        "category": "assertion_failed",
-        "fixable": False,
-        "description": "断言失败"
+        "pattern": r"AssertionError|expect.*toBe|expect.*toEqual|Test.*failed",
+        "category": "assertion_failure",
+        "fixable": True,
+        "description": "断言失败 - 根据测试期望修复代码"
     },
     "TypeError": {
         "pattern": r"TypeError",
@@ -55,7 +55,7 @@ ERROR_PATTERNS = {
 }
 
 def analyze_failures(report_path, output_path):
-    with open(report_path, 'r') as f:
+    with open(report_path, 'r', encoding='utf-8') as f:
         report = json.load(f)
     
     analysis = {

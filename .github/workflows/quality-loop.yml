@@ -34,38 +34,63 @@ jobs:
         name: test-results
         path: /tmp/test-results
     
-    - name: Generate test report
+    - name: Check report file
+      id: check_report
       run: |
-        python scripts/generate_test_report.py /tmp/test-results/results.json /tmp/report/test_report.json
+        if [ -f "/tmp/test-results/test-results.json" ]; then
+          echo "report_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "report_exists=false" >> $GITHUB_OUTPUT
+        fi
     
     - name: Analyze failures
       id: analyze
+      if: ${{ steps.check_report.outputs.report_exists == 'true' }}
       run: |
-        python scripts/analyze_failures.py /tmp/report/test_report.json /tmp/report/analysis.json
+        python scripts/analyze_failures.py /tmp/test-results/test-results.json /tmp/report/analysis.json
         
         FIXABLE=$(python -c "import json; f=open('/tmp/report/analysis.json'); d=json.load(f); print(d.get('fixable_count', 0))")
         echo "fixable_count=$FIXABLE" >> $GITHUB_OUTPUT
     
     - name: Auto fix issues
       id: autofix
-      if: ${{ steps.analyze.outputs.fixable_count > 0 }}
+      if: ${{ steps.check_report.outputs.report_exists == 'true' && steps.analyze.outputs.fixable_count > 0 }}
       run: |
+        mkdir -p /tmp/report
         python scripts/auto_fix.py /tmp/report/analysis.json
         
-        RESULT=$(cat /tmp/report/fix_result.json)
-        FIXED=$(python -c "import json; f=open('/tmp/report/fix_result.json'); d=json.load(f); print(d.get('fixed_count', 0))")
-        echo "fixed_count=$FIXED" >> $GITHUB_OUTPUT
-        
-        echo "$RESULT"
-        
-        if [ $FIXED -gt 0 ]; then
-          echo "success=true" >> $GITHUB_OUTPUT
+        if [ -f "/tmp/report/fix_result.json" ]; then
+          FIXED=$(python -c "import json; f=open('/tmp/report/fix_result.json'); d=json.load(f); print(d.get('fixed_count', 0))")
+          echo "fixed_count=$FIXED" >> $GITHUB_OUTPUT
+          
+          if [ $FIXED -gt 0 ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
         else
+          echo "fixed_count=0" >> $GITHUB_OUTPUT
           echo "success=false" >> $GITHUB_OUTPUT
         fi
     
-    - name: Create pull request
+    - name: Configure git
       if: ${{ steps.autofix.outputs.success == 'true' }}
+      run: |
+        git config user.email "actions@github.com"
+        git config user.name "GitHub Actions"
+    
+    - name: Commit fixes
+      id: commit
+      if: ${{ steps.autofix.outputs.success == 'true' }}
+      run: |
+        git add -A
+        git commit -m "auto-fix: 自动修复CI失败问题 (${{ steps.autofix.outputs.fixed_count }}个修复)"
+        git push origin ${{ github.event.workflow_run.head_branch }}
+        
+        echo "pushed=true" >> $GITHUB_OUTPUT
+    
+    - name: Create pull request
+      if: ${{ steps.autofix.outputs.success == 'true' && steps.commit.outputs.pushed != 'true' }}
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,6 +111,7 @@ jobs:
         commit-message: "auto-fix: 自动修复CI失败问题"
     
     - name: Send notification
+      if: ${{ steps.check_report.outputs.report_exists == 'true' }}
       uses: rtCamp/action-slack-notify@v2
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
